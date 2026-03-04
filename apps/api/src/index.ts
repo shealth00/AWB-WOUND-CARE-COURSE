@@ -24,6 +24,7 @@ import { buildCertificatePresentation } from "./lib/certificates.js";
 import { buildCertificateHtml, resolveCertificateTemplateDefaults } from "./lib/certificateTemplate.js";
 import { initializeDatabase, insertAuditLog, insertVerificationLookup, query, recordSyncRun } from "./lib/db.js";
 import { canAccessCertificatePdf, renderPdfFromHtml } from "./lib/pdf.js";
+import { uploadCertificatePdf } from "./lib/pdfStorage.js";
 import { createWebhookFromEnv, addRowByColumnTitle, attachFileToRow, attachLinkToRow, shareSheet, smartsheetIds } from "./lib/smartsheet.js";
 import { getLesson, listLessonsByTrack, listTracks, syncContent } from "./lib/sync.js";
 import { enforceVerifyRateLimit, getDisplayLearnerName } from "./lib/verify.js";
@@ -609,10 +610,11 @@ app.get("/api/certificates/:certificateId/pdf", async (req, res) => {
     status: string;
     issued_at: string;
     pdf_url: string | null;
+    pdf_storage_url: string | null;
   }>(
     `
       select certificate_id, user_id, learner_full_name, track, course_track, track_id, course_title,
-        completion_date, module_id, score, score_final_exam, status, issued_at, pdf_url
+        completion_date, module_id, score, score_final_exam, status, issued_at, pdf_url, pdf_storage_url
       from certificates
       where certificate_id = $1
       limit 1
@@ -677,16 +679,23 @@ app.get("/api/certificates/:certificateId/pdf", async (req, res) => {
 
   try {
     const pdfBuffer = await renderPdfFromHtml(html);
+    const pdfStorageUrl = await uploadCertificatePdf({
+      certificateId: req.params.certificateId,
+      pdfBuffer,
+    });
+    const publicPdfUrl = `${apiEnv.BASE_URL.replace(/\/$/, "")}/api/certificates/${encodeURIComponent(req.params.certificateId)}/pdf`;
 
     await query(
       `
         update certificates
-        set pdf_url = $2
+        set pdf_url = $2,
+            pdf_storage_url = $3
         where certificate_id = $1
       `,
       [
         req.params.certificateId,
-        `${apiEnv.BASE_URL.replace(/\/$/, "")}/api/certificates/${encodeURIComponent(req.params.certificateId)}/pdf`,
+        publicPdfUrl,
+        pdfStorageUrl,
       ],
     );
 

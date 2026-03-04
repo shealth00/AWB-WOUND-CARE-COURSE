@@ -29,6 +29,8 @@ const envSchema = z.object({
   CERTIFICATE_SUPPORT_EMAIL: z.string().email().default("support@advancewoundbiologic.com"),
   CERTIFICATE_PDF_TOKEN: z.string().min(8).default("development-pdf-token"),
   CERTIFICATE_WKHTMLTOPDF_BIN: z.string().default("wkhtmltopdf"),
+  AWS_REGION: z.string().default("us-east-1"),
+  CERTIFICATE_PDF_S3_BUCKET: z.string().optional(),
   VERIFY_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   VERIFY_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
 });

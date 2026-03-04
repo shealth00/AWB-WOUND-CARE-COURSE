@@ -95,6 +95,12 @@ The repo is now prepared for a single-host AWS EC2 deployment:
 - Express API on `127.0.0.1:4000`
 - PostgreSQL on the same instance
 
+Optional hardening now supported:
+
+- Managed PostgreSQL on RDS (`DATABASE_URL` with `sslmode=require`)
+- Certificate PDF persistence to S3 (`CERTIFICATE_PDF_S3_BUCKET`)
+- HTTPS endpoint through CloudFront (`*.cloudfront.net` domain)
+
 Bootstrap a fresh Ubuntu instance with:
 
 ```bash
@@ -144,6 +150,8 @@ API environment:
 - `CERTIFICATE_SUPPORT_EMAIL`
 - `CERTIFICATE_PDF_TOKEN`
 - `CERTIFICATE_WKHTMLTOPDF_BIN`
+- `AWS_REGION`
+- `CERTIFICATE_PDF_S3_BUCKET`
 - `VERIFY_RATE_LIMIT_WINDOW_MS`
 - `VERIFY_RATE_LIMIT_MAX`
 

@@ -84,6 +84,7 @@ export async function initializeDatabase(): Promise<void> {
       revoked_at timestamptz,
       revoked_reason text,
       pdf_url text,
+      pdf_storage_url text,
       created_by text not null default 'system'
     );
 
@@ -189,6 +190,7 @@ export async function initializeDatabase(): Promise<void> {
     alter table certificates add column if not exists revoked_at timestamptz;
     alter table certificates add column if not exists revoked_reason text;
     alter table certificates add column if not exists pdf_url text;
+    alter table certificates add column if not exists pdf_storage_url text;
     alter table certificates add column if not exists created_by text;
 
     update certificates
