@@ -72,6 +72,8 @@ GitHub Actions variables:
 Checked-in deployment assets:
 
 - [deploy.sh](/Volumes/SERVER%20MEM3/AWB%20WOUND%20CARE%20COURSE/infra/deploy/deploy.sh)
+- [bootstrap-ubuntu.sh](/Volumes/SERVER%20MEM3/AWB%20WOUND%20CARE%20COURSE/infra/deploy/aws/bootstrap-ubuntu.sh)
+- [awb-academy.conf](/Volumes/SERVER%20MEM3/AWB%20WOUND%20CARE%20COURSE/infra/deploy/nginx/awb-academy.conf)
 - [awb-api.service](/Volumes/SERVER%20MEM3/AWB%20WOUND%20CARE%20COURSE/infra/deploy/systemd/awb-api.service)
 - [awb-web.service](/Volumes/SERVER%20MEM3/AWB%20WOUND%20CARE%20COURSE/infra/deploy/systemd/awb-web.service)
 - [api.env.example](/Volumes/SERVER%20MEM3/AWB%20WOUND%20CARE%20COURSE/infra/deploy/env/api.env.example)
@@ -83,16 +85,34 @@ Recommended host layout:
 - API env file: `/etc/awb-academy/api.env`
 - web env file: `/etc/awb-academy/web.env`
 
+## AWS EC2 path
+
+The repo is now prepared for a single-host AWS EC2 deployment:
+
+- Ubuntu 24.04 EC2
+- Nginx on `:80`
+- Next.js on `127.0.0.1:3000`
+- Express API on `127.0.0.1:4000`
+- PostgreSQL on the same instance
+
+Bootstrap a fresh Ubuntu instance with:
+
+```bash
+sudo APP_DB_PASSWORD='replace-me' bash infra/deploy/aws/bootstrap-ubuntu.sh
+```
+
 Install the systemd units on the host:
 
 ```bash
-sudo cp infra/deploy/systemd/awb-api.service /etc/systemd/system/
-sudo cp infra/deploy/systemd/awb-web.service /etc/systemd/system/
 sudo mkdir -p /etc/awb-academy
 sudo cp infra/deploy/env/api.env.example /etc/awb-academy/api.env
 sudo cp infra/deploy/env/web.env.example /etc/awb-academy/web.env
-sudo systemctl daemon-reload
-sudo systemctl enable awb-api awb-web
+```
+
+After the repo is synced to `/srv/awb-academy`, run:
+
+```bash
+bash infra/deploy/deploy.sh
 ```
 
 ## Runtime environment variables
