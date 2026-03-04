@@ -1,0 +1,17 @@
+[Unit]
+Description=AWB Academy Web
+After=network.target awb-api.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/srv/awb-academy/apps/web
+EnvironmentFile=/etc/awb-academy/web.env
+ExecStart=/usr/bin/npm run start -- --hostname 0.0.0.0 --port 3000
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=awb-web
+
+[Install]
+WantedBy=multi-user.target

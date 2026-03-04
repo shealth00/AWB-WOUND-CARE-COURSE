@@ -1,0 +1,17 @@
+[Unit]
+Description=AWB Academy API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/srv/awb-academy
+EnvironmentFile=/etc/awb-academy/api.env
+ExecStart=/usr/bin/node /srv/awb-academy/apps/api/dist/index.js
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=awb-api
+
+[Install]
+WantedBy=multi-user.target

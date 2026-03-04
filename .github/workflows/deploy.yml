@@ -1,0 +1,91 @@
+name: QA and Deploy
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit and API tests
+        run: npm run test
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: qa
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      API_SERVICE_NAME: ${{ vars.API_SERVICE_NAME }}
+      WEB_SERVICE_NAME: ${{ vars.WEB_SERVICE_NAME }}
+
+    steps:
+      - name: Check deploy configuration
+        id: deploy-config
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_USER" ] || [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_PATH" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Deployment secrets or variables are missing. Skipping deploy."
+            exit 0
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check out repository
+        if: steps.deploy-config.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        if: steps.deploy-config.outputs.configured == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync code to host
+        if: steps.deploy-config.outputs.configured == 'true'
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+
+      - name: Install, build, and restart services
+        if: steps.deploy-config.outputs.configured == 'true'
+        run: |
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "DEPLOY_PATH='$DEPLOY_PATH' API_SERVICE_NAME='${API_SERVICE_NAME:-awb-api}' WEB_SERVICE_NAME='${WEB_SERVICE_NAME:-awb-web}' bash -s" <<'EOF'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          bash infra/deploy/deploy.sh
+          EOF

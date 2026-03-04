@@ -1,0 +1,36 @@
+{
+  "name": "@awb/api",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "webhook:create": "tsx src/scripts/createWebhook.ts"
+  },
+  "dependencies": {
+    "@awb/lms-core": "*",
+    "@awb/smartsheet-client": "*",
+    "dotenv": "16.4.7",
+    "express": "4.21.2",
+    "multer": "1.4.5-lts.2",
+    "node-cron": "4.0.5",
+    "pg": "8.14.1",
+    "qrcode": "1.5.4",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.0",
+    "@types/multer": "1.4.12",
+    "@types/node": "22.13.10",
+    "@types/pg": "8.11.11",
+    "@types/qrcode": "1.5.5",
+    "@types/supertest": "6.0.3",
+    "supertest": "7.1.1",
+    "tsx": "4.19.3",
+    "typescript": "5.8.2",
+    "vitest": "3.2.4"
+  }
+}

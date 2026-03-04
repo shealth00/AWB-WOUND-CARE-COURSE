@@ -1,0 +1,3 @@
+[defaults]
+model = "gpt-5"
+provider = "openai"
