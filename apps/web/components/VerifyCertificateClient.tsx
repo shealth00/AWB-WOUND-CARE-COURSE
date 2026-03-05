@@ -39,7 +39,7 @@ export function VerifyCertificateClient() {
       return;
     }
 
-    void fetch(apiUrl(`/api/verify/${params.certificateId}`))
+    void fetch(apiUrl(`/verify/${params.certificateId}`))
       .then(async (response) => {
         const payload = (await response.json()) as VerifyResponse;
 

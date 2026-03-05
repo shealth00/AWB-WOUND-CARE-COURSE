@@ -442,6 +442,15 @@ export const TOOL_LIBRARY: ProgramTool[] = [
     formRoute: "/forms",
     printFriendly: true,
   },
+  {
+    id: "video-library-manifest",
+    title: "AWB Video Library Catalog (JSON)",
+    audience: "all",
+    summary: "Starter 12-video lesson manifest for LMS ingestion and player mapping.",
+    downloadUrl: "/videos/awb-video-catalog.json",
+    formRoute: "/catalog",
+    printFriendly: false,
+  },
 ];
 
 export const DOCUMENTATION_PACK = {

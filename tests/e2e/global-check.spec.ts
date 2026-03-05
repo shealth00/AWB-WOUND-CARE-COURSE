@@ -107,18 +107,19 @@ async function mockApi(page: Page) {
   await page.route(`${apiBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
     const pathname = url.pathname.replace(/^\/mock-api/, "");
+    const normalizedPath = pathname.replace(/^\/api/, "");
 
-    if (pathname === "/program/catalog") {
+    if (normalizedPath === "/program/catalog") {
       await route.fulfill({ json: programCatalog });
       return;
     }
 
-    if (pathname === "/catalog") {
+    if (normalizedPath === "/catalog") {
       await route.fulfill({ json: catalogPayload });
       return;
     }
 
-    if (pathname === "/lcd-updates") {
+    if (normalizedPath === "/lcd-updates") {
       await route.fulfill({
         json: {
           updates: [
@@ -136,7 +137,7 @@ async function mockApi(page: Page) {
       return;
     }
 
-    if (pathname === "/quiz") {
+    if (normalizedPath === "/quiz") {
       await route.fulfill({
         json: {
           track: "Provider Track",
@@ -159,7 +160,7 @@ async function mockApi(page: Page) {
       return;
     }
 
-    if (pathname === "/quiz/submit") {
+    if (normalizedPath === "/quiz/submit") {
       await route.fulfill({
         json: {
           attemptId: "attempt-1",
@@ -175,7 +176,7 @@ async function mockApi(page: Page) {
       return;
     }
 
-    if (pathname === "/forms/submit") {
+    if (normalizedPath === "/forms/submit") {
       await route.fulfill({
         json: {
           submissionId: "FORM-1",
@@ -186,7 +187,7 @@ async function mockApi(page: Page) {
       return;
     }
 
-    if (pathname === "/completion/demo-user") {
+    if (normalizedPath === "/completion/demo-user") {
       await route.fulfill({
         json: {
           userId: "demo-user",
@@ -207,7 +208,7 @@ async function mockApi(page: Page) {
       return;
     }
 
-    if (pathname === `/api/verify/${certificateId}`) {
+    if (normalizedPath === `/verify/${certificateId}`) {
       await route.fulfill({
         json: {
           valid: true,
@@ -236,7 +237,7 @@ async function mockApi(page: Page) {
       return;
     }
 
-    if (pathname === "/admin/dashboard") {
+    if (normalizedPath === "/admin/dashboard") {
       await route.fulfill({
         json: {
           forms: [{ submission_id: "FORM-1", status: "New" }],
@@ -248,7 +249,7 @@ async function mockApi(page: Page) {
       return;
     }
 
-    if (pathname === "/admin/forms") {
+    if (normalizedPath === "/admin/forms") {
       await route.fulfill({
         json: {
           forms: [{ submission_id: "FORM-1", submission_type: "Facility Escalation Packet" }],
@@ -257,7 +258,7 @@ async function mockApi(page: Page) {
       return;
     }
 
-    if (pathname === "/admin/sync") {
+    if (normalizedPath === "/admin/sync") {
       await route.fulfill({
         json: {
           source: "admin",
@@ -268,7 +269,7 @@ async function mockApi(page: Page) {
       return;
     }
 
-    if (pathname === "/admin/share-sheet") {
+    if (normalizedPath === "/admin/share-sheet") {
       await route.fulfill({
         json: {
           shared: true,
@@ -317,7 +318,7 @@ test("runs the global UI check across catalog, quiz, forms, completion, verify, 
   await page.getByLabel("Notes").fill("Weekly packet ready for review.");
   const formResponse = page.waitForResponse(
     (response) =>
-      response.url().includes("/mock-api/forms/submit") &&
+      response.url().includes("/mock-api/api/forms/submit") &&
       response.request().method() === "POST",
   );
   await page.getByRole("button", { name: "Submit form" }).click();

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { apiEnv } from "../env.js";
+import { verifyAdminToken } from "./auth.js";
 
 export async function renderPdfFromHtml(html: string): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
@@ -32,5 +33,9 @@ export async function renderPdfFromHtml(html: string): Promise<Buffer> {
 
 export function canAccessCertificatePdf(authHeader: string | undefined, token: string | undefined): boolean {
   const bearerToken = authHeader?.replace(/^Bearer\s+/i, "");
-  return token === apiEnv.CERTIFICATE_PDF_TOKEN || bearerToken === apiEnv.ADMIN_API_KEY;
+  return (
+    token === apiEnv.CERTIFICATE_PDF_TOKEN ||
+    bearerToken === apiEnv.ADMIN_API_KEY ||
+    Boolean(bearerToken && verifyAdminToken(bearerToken))
+  );
 }

@@ -125,9 +125,15 @@ export function LessonClient() {
         </p>
         {lesson.video_url ? (
           <div className="card">
-            <a className="button" href={lesson.video_url} target="_blank" rel="noreferrer">
-              Open training video
-            </a>
+            <video controls preload="metadata" style={{ borderRadius: 12, width: "100%" }}>
+              <source src={lesson.video_url} />
+              Your browser does not support embedded video playback.
+            </video>
+            <div className="actions" style={{ marginTop: 12 }}>
+              <a className="button secondary" href={lesson.video_url} target="_blank" rel="noreferrer">
+                Open video in new tab
+              </a>
+            </div>
           </div>
         ) : null}
       </section>

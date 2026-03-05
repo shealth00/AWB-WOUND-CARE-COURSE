@@ -3,7 +3,7 @@
 Setup:
 
 1. Copy `apps/api/.env.example` to `apps/api/.env` and fill in Postgres + Smartsheet values.
-2. Copy `apps/web/.env.example` to `apps/web/.env.local`.
+2. Copy `apps/web/.env.example` to `apps/web/.env.local` (or set `NEXT_PUBLIC_API_BASE_URL` to empty for same-origin `/api`).
 3. Install dependencies with `npm install`.
 4. Start the API with `npm run dev:api`.
 5. Start the web app with `npm run dev:web`.
@@ -22,7 +22,10 @@ Common commands:
 
 Admin authentication:
 
-- Admin endpoints require `x-admin-key` matching `ADMIN_API_KEY`
+- Login endpoint: `POST /api/admin/login` using `ADMIN_LOGIN_EMAIL` + `ADMIN_LOGIN_PASSWORD`
+- Logout endpoint: `POST /api/admin/logout`
+- Bearer tokens are accepted by all admin endpoints
+- Legacy key auth still works with `x-admin-key` matching `ADMIN_API_KEY`
 - Optional audit headers:
   - `x-awb-actor`
   - `x-awb-role` (`admin` or `ops`)
@@ -30,26 +33,35 @@ Admin authentication:
 Nightly sync:
 
 - Controlled by `NIGHTLY_SYNC_CRON`
-- Manual refresh: `POST /admin/sync`
+- Manual refresh: `POST /api/admin/sync`
+- Demo data reset + reseed: `POST /api/admin/reset`
 
 LMS-ready endpoints:
 
-- `GET /program/catalog`
-- `GET /lcd-updates`
-- `POST /progress/lessons`
-- `POST /assignments/practical`
-- `GET /verify/:certificateId`
+- `GET /api/program/catalog`
+- `GET /api/lcd-updates`
+- `POST /api/progress/lessons`
+- `POST /api/assignments/practical`
+- `GET /api/verify/:certificateId`
 - `GET /api/certificates/:certificateId/html`
 - `GET /api/certificates/:certificateId/pdf`
 
 Portal downloads:
 
 - `/downloads/awb-wound-documentation-pack.pdf`
+- `/downloads/awb-wound-care-dictation-guide.pdf`
+- `/downloads/awb-requirements-clinical-note-review.pdf`
+- `/downloads/awb-assessment-sample-note.pdf`
+- `/downloads/awb-graft-application-sample-note.pdf`
+- `/downloads/awb-ctp-graft-medicare-guidelines.pdf`
+- `/downloads/awb-ctp-assessment-medicare-guidelines.pdf`
 - `/downloads/lcd-wound-care-l37166.pdf`
+- `/videos/awb-video-catalog.json`
 
 Webhook verification:
 
 - Smartsheet challenge requests must hit `POST /smartsheet/webhook`
+- API-prefixed webhook endpoint is also available at `POST /api/smartsheet/webhook`
 - The handler echoes the `Smartsheet-Hook-Challenge` value via `Smartsheet-Hook-Response`
 
 Certificate verification controls:

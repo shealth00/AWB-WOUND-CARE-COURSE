@@ -1,0 +1,79 @@
+{
+  "program": "AWB Academy",
+  "issuer": "Advance Wound Biologic",
+  "version": "1.0",
+  "videos": [
+    {
+      "id": "V01",
+      "track": "Shared Core",
+      "title": "Medicare LCD Reality: How Coverage Decisions Happen",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+    },
+    {
+      "id": "V02",
+      "track": "Shared Core",
+      "title": "Audit-Ready Wound Documentation: Measure, Stage, Trend",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+    },
+    {
+      "id": "V03",
+      "track": "Shared Core",
+      "title": "Debridement Documentation That Does Not Get Denied",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+    },
+    {
+      "id": "V04",
+      "track": "Provider Track",
+      "title": "When Standard Care Failed: Escalation Criteria",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+    },
+    {
+      "id": "V05",
+      "track": "Provider Track",
+      "title": "Skin Grafting Fundamentals: Bed Prep to Aftercare",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4"
+    },
+    {
+      "id": "V06",
+      "track": "Provider Track",
+      "title": "CTP and Skin Substitute Application Note",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
+    },
+    {
+      "id": "V07",
+      "track": "Post-Acute and Senior Care Track",
+      "title": "SNF Wound Rounds: 10-Minute Workflow",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4"
+    },
+    {
+      "id": "V08",
+      "track": "Post-Acute and Senior Care Track",
+      "title": "Pressure Injury Prevention Bundle",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
+    },
+    {
+      "id": "V09",
+      "track": "ASC / Ortho Track",
+      "title": "Surgical Wounds: What Changes Management",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4"
+    },
+    {
+      "id": "V10",
+      "track": "ASC / Ortho Track",
+      "title": "Post-Op Graft Care Protocol",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+    },
+    {
+      "id": "V11",
+      "track": "Sales and Marketing Track",
+      "title": "Coverage Questions: What You Can Say",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4"
+    },
+    {
+      "id": "V12",
+      "track": "Distributor Track",
+      "title": "Chain of Custody and Traceability",
+      "url": "https://storage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4"
+    }
+  ]
+}

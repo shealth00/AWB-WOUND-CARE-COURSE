@@ -19,10 +19,11 @@ import {
 import { PROGRAM_CATALOG, PROGRAM_TRACKS } from "@awb/lms-core/program";
 import { z } from "zod";
 import { apiEnv } from "./env.js";
-import { assertShareRole, getAdminIdentity, requireAdmin } from "./lib/auth.js";
+import { assertShareRole, getAdminIdentity, issueAdminToken, requireAdmin } from "./lib/auth.js";
 import { buildCertificatePresentation } from "./lib/certificates.js";
 import { buildCertificateHtml, resolveCertificateTemplateDefaults } from "./lib/certificateTemplate.js";
 import { initializeDatabase, insertAuditLog, insertVerificationLookup, query, recordSyncRun } from "./lib/db.js";
+import { ensureDemoCatalogAndQuestions, resetOperationalData } from "./lib/demoSeed.js";
 import { canAccessCertificatePdf, renderPdfFromHtml } from "./lib/pdf.js";
 import { uploadCertificatePdf } from "./lib/pdfStorage.js";
 import { createWebhookFromEnv, addRowByColumnTitle, attachFileToRow, attachLinkToRow, shareSheet, smartsheetIds } from "./lib/smartsheet.js";
@@ -55,18 +56,18 @@ app.get("/health", async (_req, res) => {
   });
 });
 
-app.get("/program/catalog", (_req, res) => {
+app.get(["/program/catalog", "/api/program/catalog"], (_req, res) => {
   res.json(PROGRAM_CATALOG);
 });
 
-app.get("/lcd-updates", (_req, res) => {
+app.get(["/lcd-updates", "/api/lcd-updates"], (_req, res) => {
   res.json({
     updates: PROGRAM_CATALOG.lcdUpdateLog,
     strategy: PROGRAM_CATALOG.latestLcdHandling,
   });
 });
 
-app.get("/catalog", async (req, res) => {
+app.get(["/catalog", "/api/catalog"], async (req, res) => {
   const track = typeof req.query.track === "string" ? req.query.track : undefined;
   const [tracks, lessons] = await Promise.all([listTracks(), listLessonsByTrack(track)]);
 
@@ -76,8 +77,8 @@ app.get("/catalog", async (req, res) => {
   });
 });
 
-app.get("/lessons/:lessonId", async (req, res) => {
-  const lesson = await getLesson(req.params.lessonId);
+app.get(["/lessons/:lessonId", "/api/lessons/:lessonId"], async (req, res) => {
+  const lesson = await getLesson(getRouteParam(req.params.lessonId));
 
   if (!lesson) {
     res.status(404).json({ error: "Lesson not found." });
@@ -87,7 +88,8 @@ app.get("/lessons/:lessonId", async (req, res) => {
   res.json(lesson);
 });
 
-app.get("/completion/:userId", async (req, res) => {
+app.get(["/completion/:userId", "/api/completion/:userId"], async (req, res) => {
+  const userId = getRouteParam(req.params.userId);
   const attempts = await query(
     `
       select attempt_id, track, module_id, attempt_number, score, pass_fail, completed_at, certificate_id
@@ -95,16 +97,16 @@ app.get("/completion/:userId", async (req, res) => {
       where user_id = $1
       order by completed_at desc
     `,
-    [req.params.userId],
+    [userId],
   );
 
   res.json({
-    userId: req.params.userId,
+    userId,
     attempts,
   });
 });
 
-app.post("/progress/lessons", async (req, res) => {
+app.post(["/progress/lessons", "/api/progress/lessons"], async (req, res) => {
   const schema = z.object({
     userId: z.string().min(1),
     trackId: z.string().min(1),
@@ -155,7 +157,7 @@ app.post("/progress/lessons", async (req, res) => {
   });
 });
 
-app.post("/assignments/practical", async (req, res) => {
+app.post(["/assignments/practical", "/api/assignments/practical"], async (req, res) => {
   const schema = z.object({
     userId: z.string().min(1),
     trackId: z.literal("providers"),
@@ -195,7 +197,7 @@ app.post("/assignments/practical", async (req, res) => {
   });
 });
 
-app.get("/quiz", async (req, res) => {
+app.get(["/quiz", "/api/quiz"], async (req, res) => {
   const schema = z.object({
     track: z.string().min(1),
     moduleId: z.string().min(1),
@@ -250,7 +252,7 @@ app.get("/quiz", async (req, res) => {
   });
 });
 
-app.post("/quiz/submit", async (req, res) => {
+app.post(["/quiz/submit", "/api/quiz/submit"], async (req, res) => {
   const schema = z.object({
     userId: z.string().min(1),
     learnerFullName: z.string().min(1).optional(),
@@ -424,7 +426,8 @@ app.post("/quiz/submit", async (req, res) => {
   });
 });
 
-app.get(["/verify/:certificateId", "/api/verify/:certificateId"], async (req, res) => {
+app.get("/api/verify/:certificateId", async (req, res) => {
+  const certificateId = getRouteParam(req.params.certificateId);
   const ipAddress = req.ip || req.socket.remoteAddress || "unknown";
 
   if (!enforceVerifyRateLimit(ipAddress)) {
@@ -462,7 +465,7 @@ app.get(["/verify/:certificateId", "/api/verify/:certificateId"], async (req, re
       where certificate_id = $1
       limit 1
     `,
-    [req.params.certificateId],
+    [certificateId],
   );
 
   if (!certificate) {
@@ -503,6 +506,7 @@ app.get(["/verify/:certificateId", "/api/verify/:certificateId"], async (req, re
 });
 
 app.get("/api/certificates/:certificateId/html", async (req, res) => {
+  const certificateId = getRouteParam(req.params.certificateId);
   const [certificate] = await query<{
     certificate_id: string;
     user_id: string;
@@ -526,7 +530,7 @@ app.get("/api/certificates/:certificateId/html", async (req, res) => {
       where certificate_id = $1
       limit 1
     `,
-    [req.params.certificateId],
+    [certificateId],
   );
 
   if (!certificate) {
@@ -590,6 +594,7 @@ app.get("/api/certificates/:certificateId/html", async (req, res) => {
 });
 
 app.get("/api/certificates/:certificateId/pdf", async (req, res) => {
+  const certificateId = getRouteParam(req.params.certificateId);
   if (!canAccessCertificatePdf(req.get("authorization") ?? undefined, typeof req.query.token === "string" ? req.query.token : undefined)) {
     res.status(401).json({ error: "PDF access requires an admin token or certificate PDF token." });
     return;
@@ -619,7 +624,7 @@ app.get("/api/certificates/:certificateId/pdf", async (req, res) => {
       where certificate_id = $1
       limit 1
     `,
-    [req.params.certificateId],
+    [certificateId],
   );
 
   if (!certificate) {
@@ -680,10 +685,10 @@ app.get("/api/certificates/:certificateId/pdf", async (req, res) => {
   try {
     const pdfBuffer = await renderPdfFromHtml(html);
     const pdfStorageUrl = await uploadCertificatePdf({
-      certificateId: req.params.certificateId,
+      certificateId,
       pdfBuffer,
     });
-    const publicPdfUrl = `${apiEnv.BASE_URL.replace(/\/$/, "")}/api/certificates/${encodeURIComponent(req.params.certificateId)}/pdf`;
+    const publicPdfUrl = `${apiEnv.BASE_URL.replace(/\/$/, "")}/api/certificates/${encodeURIComponent(certificateId)}/pdf`;
 
     await query(
       `
@@ -693,7 +698,7 @@ app.get("/api/certificates/:certificateId/pdf", async (req, res) => {
         where certificate_id = $1
       `,
       [
-        req.params.certificateId,
+        certificateId,
         publicPdfUrl,
         pdfStorageUrl,
       ],
@@ -702,7 +707,7 @@ app.get("/api/certificates/:certificateId/pdf", async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `inline; filename="${req.params.certificateId}.pdf"`,
+      `inline; filename="${certificateId}.pdf"`,
     );
     res.send(pdfBuffer);
   } catch (error) {
@@ -808,7 +813,7 @@ app.post("/api/certificates", requireAdmin, async (req, res) => {
   });
 });
 
-app.post("/forms/submit", upload.array("attachments", 5), async (req, res) => {
+app.post(["/forms/submit", "/api/forms/submit"], upload.array("attachments", 5), async (req, res) => {
   const schema = z.object({
     submissionType: z.enum([
       "Facility Escalation Packet",
@@ -901,7 +906,7 @@ app.post("/forms/submit", upload.array("attachments", 5), async (req, res) => {
   });
 });
 
-app.post("/ivr/events", upload.single("audio"), async (req, res) => {
+app.post(["/ivr/events", "/api/ivr/events"], upload.single("audio"), async (req, res) => {
   const schema = z.object({
     callId: z.string().min(1),
     callerType: z.enum(["SNF nurse", "Provider", "Patient", "Other"]),
@@ -1018,7 +1023,7 @@ app.post("/ivr/events", upload.single("audio"), async (req, res) => {
   });
 });
 
-app.post("/smartsheet/webhook", async (req, res) => {
+app.post(["/smartsheet/webhook", "/api/smartsheet/webhook"], async (req, res) => {
   const challenge = req.get("Smartsheet-Hook-Challenge");
 
   if (challenge) {
@@ -1066,7 +1071,50 @@ app.post("/smartsheet/webhook", async (req, res) => {
   res.status(202).json({ accepted: true });
 });
 
-app.post("/admin/sync", requireAdmin, async (req, res) => {
+app.post(["/admin/login", "/api/admin/login"], async (req, res) => {
+  const schema = z.object({
+    email: z.string().email(),
+    password: z.string().min(1),
+    actor: z.string().trim().min(1).max(64).optional(),
+    role: z.enum(["admin", "ops"]).default("admin"),
+  });
+  const parseResult = schema.safeParse(req.body);
+
+  if (!parseResult.success) {
+    res.status(400).json({ error: parseResult.error.flatten() });
+    return;
+  }
+
+  const payload = parseResult.data;
+
+  if (
+    payload.email.toLowerCase() !== apiEnv.ADMIN_LOGIN_EMAIL.toLowerCase() ||
+    payload.password !== apiEnv.ADMIN_LOGIN_PASSWORD
+  ) {
+    res.status(401).json({ error: "Invalid admin credentials." });
+    return;
+  }
+
+  const identity = {
+    actor: payload.actor ?? payload.email.split("@")[0] ?? "admin",
+    role: payload.role,
+  };
+  const token = issueAdminToken(identity);
+
+  res.json({
+    loggedIn: true,
+    token,
+    actor: identity.actor,
+    role: identity.role,
+    expiresInSec: apiEnv.ADMIN_SESSION_TTL_SEC,
+  });
+});
+
+app.post(["/admin/logout", "/api/admin/logout"], (_req, res) => {
+  res.json({ loggedOut: true });
+});
+
+app.post(["/admin/sync", "/api/admin/sync"], requireAdmin, async (req, res) => {
   const admin = getAdminIdentity(req);
   const summary = await syncContent("admin");
 
@@ -1082,7 +1130,36 @@ app.post("/admin/sync", requireAdmin, async (req, res) => {
   res.json(summary);
 });
 
-app.get("/admin/forms", requireAdmin, async (req, res) => {
+app.post(["/admin/reset", "/api/admin/reset"], requireAdmin, async (req, res) => {
+  const schema = z.object({
+    clearCatalog: z.coerce.boolean().default(true),
+  });
+  const parseResult = schema.safeParse(req.body ?? {});
+  const payload = parseResult.success ? parseResult.data : { clearCatalog: true };
+  const admin = getAdminIdentity(req);
+
+  await resetOperationalData(payload.clearCatalog);
+  const seedSummary = await ensureDemoCatalogAndQuestions();
+
+  await insertAuditLog({
+    actor: admin.actor,
+    role: admin.role,
+    action: "admin.reset",
+    entityType: "platform",
+    entityId: "demo-data",
+    details: {
+      clearCatalog: payload.clearCatalog,
+      ...seedSummary,
+    },
+  });
+
+  res.json({
+    reset: true,
+    ...seedSummary,
+  });
+});
+
+app.get(["/admin/forms", "/api/admin/forms"], requireAdmin, async (req, res) => {
   const rows = await query(
     `
       select submission_id, submission_type, site_type, facility_name, case_id, status, assigned_to,
@@ -1096,7 +1173,7 @@ app.get("/admin/forms", requireAdmin, async (req, res) => {
   res.json({ forms: rows });
 });
 
-app.get("/admin/dashboard", requireAdmin, async (_req, res) => {
+app.get(["/admin/dashboard", "/api/admin/dashboard"], requireAdmin, async (_req, res) => {
   const [forms, ivr, webhooks, syncRuns] = await Promise.all([
     query(`select submission_id, submission_type, status, created_at from form_submissions order by created_at desc limit 10`),
     query(`select intake_id, call_id, priority, assigned_to, created_at from ivr_intakes order by created_at desc limit 10`),
@@ -1112,7 +1189,7 @@ app.get("/admin/dashboard", requireAdmin, async (_req, res) => {
   });
 });
 
-app.post("/admin/share-sheet", requireAdmin, async (req, res) => {
+app.post(["/admin/share-sheet", "/api/admin/share-sheet"], requireAdmin, async (req, res) => {
   const schema = z.object({
     sheetType: z.enum(["catalog", "questionbank", "results", "forms", "ivr"]),
     email: z.string().email(),
@@ -1166,49 +1243,67 @@ app.post("/admin/share-sheet", requireAdmin, async (req, res) => {
   });
 });
 
-app.post(["/admin/certificates/:certificateId/revoke", "/api/certificates/:certificateId/revoke"], requireAdmin, async (req, res) => {
-  const schema = z.object({
-    reason: z.string().trim().min(1).optional(),
-  });
-  const parseResult = schema.safeParse(req.body ?? {});
-  const admin = getAdminIdentity(req);
-  const reason = parseResult.success ? parseResult.data.reason ?? null : null;
+app.post(
+  [
+    "/admin/certificates/:certificateId/revoke",
+    "/api/admin/certificates/:certificateId/revoke",
+    "/api/certificates/:certificateId/revoke",
+  ],
+  requireAdmin,
+  async (req, res) => {
+    const certificateId = getRouteParam(req.params.certificateId);
+    const schema = z.object({
+      reason: z.string().trim().min(1).optional(),
+    });
+    const parseResult = schema.safeParse(req.body ?? {});
+    const admin = getAdminIdentity(req);
+    const reason = parseResult.success ? parseResult.data.reason ?? null : null;
 
-  const rows = await query<{ certificate_id: string }>(
-    `
-      update certificates
-      set status = 'revoked',
-          revoked_at = now(),
-          revoked_reason = coalesce($2, revoked_reason)
-      where certificate_id = $1
-      returning certificate_id
-    `,
-    [req.params.certificateId, reason],
-  );
+    const rows = await query<{ certificate_id: string }>(
+      `
+        update certificates
+        set status = 'revoked',
+            revoked_at = now(),
+            revoked_reason = coalesce($2, revoked_reason)
+        where certificate_id = $1
+        returning certificate_id
+      `,
+      [certificateId, reason],
+    );
 
-  if (!rows[0]) {
-    res.status(404).json({ error: "Certificate not found." });
-    return;
+    if (!rows[0]) {
+      res.status(404).json({ error: "Certificate not found." });
+      return;
+    }
+
+    await insertAuditLog({
+      actor: admin.actor,
+      role: admin.role,
+      action: "admin.revoke-certificate",
+      entityType: "certificate",
+      entityId: certificateId,
+      details: reason ? { reason } : undefined,
+    });
+
+    res.json({
+      revoked: true,
+      certificateId,
+      revokedReason: reason,
+    });
+  },
+);
+
+function getRouteParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
   }
 
-  await insertAuditLog({
-    actor: admin.actor,
-    role: admin.role,
-    action: "admin.revoke-certificate",
-    entityType: "certificate",
-    entityId: String(req.params.certificateId),
-    details: reason ? { reason } : undefined,
-  });
-
-  res.json({
-    revoked: true,
-    certificateId: req.params.certificateId,
-    revokedReason: reason,
-  });
-});
+  return value ?? "";
+}
 
 export async function startServer() {
   await initializeDatabase();
+  await ensureDemoCatalogAndQuestions();
 
   cron.schedule(apiEnv.NIGHTLY_SYNC_CRON, async () => {
     try {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiUrl } from "../src/api";
 
 interface DashboardResponse {
@@ -10,27 +10,114 @@ interface DashboardResponse {
   syncRuns: Array<Record<string, unknown>>;
 }
 
+interface LoginResponse {
+  loggedIn: boolean;
+  token: string;
+  actor: string;
+  role: "admin" | "ops";
+  expiresInSec: number;
+}
+
+const ADMIN_TOKEN_KEY = "awb-admin-token";
+
 export function AdminClient() {
+  const [token, setToken] = useState("");
   const [apiKey, setApiKey] = useState("development-admin-key");
   const [role, setRole] = useState("admin");
   const [actor, setActor] = useState("awb-ops");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [forms, setForms] = useState<Array<Record<string, unknown>>>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [shareEmail, setShareEmail] = useState("");
   const [shareSheetType, setShareSheetType] = useState("forms");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(ADMIN_TOKEN_KEY);
+
+    if (saved) {
+      setToken(saved);
+    }
+  }, []);
 
   function adminHeaders() {
-    return {
-      "x-admin-key": apiKey,
-      "x-awb-role": role,
-      "x-awb-actor": actor,
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+      return headers;
+    }
+
+    headers["x-admin-key"] = apiKey;
+    headers["x-awb-role"] = role;
+    headers["x-awb-actor"] = actor;
+    return headers;
+  }
+
+  async function login() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(apiUrl("/admin/login"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          role,
+          actor,
+        }),
+      });
+      const payload = (await response.json()) as LoginResponse | { error?: string };
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error ?? "Admin login failed." : "Admin login failed.");
+      }
+
+      const loginPayload = payload as LoginResponse;
+      setToken(loginPayload.token);
+      setActor(loginPayload.actor);
+      setRole(loginPayload.role);
+      localStorage.setItem(ADMIN_TOKEN_KEY, loginPayload.token);
+      setNotice(`Logged in as ${loginPayload.actor} (${loginPayload.role}).`);
+      setPassword("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Admin login failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function logout() {
+    setBusy(true);
+    setError(null);
+
+    try {
+      await fetch(apiUrl("/admin/logout"), {
+        method: "POST",
+      });
+    } finally {
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      setToken("");
+      setDashboard(null);
+      setForms([]);
+      setNotice("Logged out.");
+      setBusy(false);
+    }
   }
 
   async function runSync() {
     setError(null);
+    setNotice(null);
 
     try {
       const response = await fetch(apiUrl("/admin/sync"), {
@@ -43,8 +130,48 @@ export function AdminClient() {
       }
 
       await loadDashboard();
+      setNotice("Catalog sync completed.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Content sync failed.");
+    }
+  }
+
+  async function runReset() {
+    const confirmed = window.confirm(
+      "Reset demo operational data and regenerate catalog/questions? This clears attempts, certificates, forms, IVR, and audit run history.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(apiUrl("/admin/reset"), {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          clearCatalog: true,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        seededLessons?: number;
+        seededQuestions?: number;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Reset failed.");
+      }
+
+      await loadDashboard();
+      setNotice(
+        `Reset complete. Seeded lessons: ${payload.seededLessons ?? 0}. Seeded questions: ${payload.seededQuestions ?? 0}.`,
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Reset failed.");
     }
   }
 
@@ -77,6 +204,7 @@ export function AdminClient() {
 
   async function shareCurrentSheet() {
     setError(null);
+    setNotice(null);
 
     try {
       const response = await fetch(apiUrl("/admin/share-sheet"), {
@@ -95,26 +223,37 @@ export function AdminClient() {
       }
 
       setShareEmail("");
+      setNotice(`Sheet shared: ${shareSheetType}.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Share failed.");
     }
   }
+
+  const isAuthenticated = Boolean(token || apiKey);
 
   return (
     <div className="grid">
       <section className="hero">
         <h1>Admin operations</h1>
         <p className="muted">
-          Admin endpoints use an API key plus role header. Use `ops` for forms and IVR sharing only,
-          or `admin` for all operational sheets.
+          Manage sync, forms, IVR, sheet sharing, and demo reset from one panel.
         </p>
       </section>
 
       <section className="card">
+        <h2>Admin login</h2>
         <div className="split">
           <label className="field">
-            Admin API key
-            <input onChange={(event) => setApiKey(event.target.value)} value={apiKey} />
+            Admin email
+            <input onChange={(event) => setEmail(event.target.value)} value={email} />
+          </label>
+          <label className="field">
+            Password
+            <input
+              onChange={(event) => setPassword(event.target.value)}
+              type="password"
+              value={password}
+            />
           </label>
           <label className="field">
             Actor
@@ -129,11 +268,40 @@ export function AdminClient() {
           </label>
         </div>
         <div className="actions">
-          <button className="button" onClick={() => void loadDashboard()} type="button">
+          <button className="button" disabled={busy} onClick={() => void login()} type="button">
+            Login
+          </button>
+          <button
+            className="button secondary"
+            disabled={!token || busy}
+            onClick={() => void logout()}
+            type="button"
+          >
+            Logout
+          </button>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Legacy API key (optional)</h2>
+        <div className="split">
+          <label className="field">
+            Admin API key
+            <input onChange={(event) => setApiKey(event.target.value)} value={apiKey} />
+          </label>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="actions">
+          <button className="button" disabled={!isAuthenticated} onClick={() => void loadDashboard()} type="button">
             Load dashboard
           </button>
-          <button className="button secondary" onClick={() => void runSync()} type="button">
+          <button className="button secondary" disabled={!isAuthenticated} onClick={() => void runSync()} type="button">
             Force content sync
+          </button>
+          <button className="button secondary" disabled={!isAuthenticated} onClick={() => void runReset()} type="button">
+            Reset demo data
           </button>
         </div>
       </section>
@@ -157,12 +325,13 @@ export function AdminClient() {
           </label>
         </div>
         <div className="actions">
-          <button className="button" onClick={() => void shareCurrentSheet()} type="button">
+          <button className="button" disabled={!isAuthenticated} onClick={() => void shareCurrentSheet()} type="button">
             Share sheet
           </button>
         </div>
       </section>
 
+      {notice ? <div className="card status-good">{notice}</div> : null}
       {error ? <div className="card status-bad">{error}</div> : null}
 
       {dashboard ? (

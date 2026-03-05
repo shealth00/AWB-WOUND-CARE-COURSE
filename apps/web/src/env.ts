@@ -3,7 +3,7 @@ const publicEnv = {
   NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
 };
 
-function requirePublicEnv(name: "NEXT_PUBLIC_API_BASE_URL" | "NEXT_PUBLIC_APP_ENV"): string {
+function requirePublicEnv(name: "NEXT_PUBLIC_APP_ENV"): string {
   const value = publicEnv[name];
 
   if (!value) {
@@ -14,6 +14,6 @@ function requirePublicEnv(name: "NEXT_PUBLIC_API_BASE_URL" | "NEXT_PUBLIC_APP_EN
 }
 
 export const webEnv = {
-  apiBaseUrl: requirePublicEnv("NEXT_PUBLIC_API_BASE_URL"),
+  apiBaseUrl: (publicEnv.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, ""),
   appEnv: requirePublicEnv("NEXT_PUBLIC_APP_ENV"),
 };
