@@ -115,4 +115,10 @@ Current implementation mapping:
 - Certificate verification + QR payload: `GET /verify/:certificateId`
 - Static download assets:
   - `apps/web/public/downloads/awb-wound-documentation-pack.pdf`
+  - `apps/web/public/downloads/awb-wound-care-dictation-guide.pdf`
+  - `apps/web/public/downloads/awb-requirements-clinical-note-review.pdf`
+  - `apps/web/public/downloads/awb-assessment-sample-note.pdf`
+  - `apps/web/public/downloads/awb-graft-application-sample-note.pdf`
+  - `apps/web/public/downloads/awb-ctp-graft-medicare-guidelines.pdf`
+  - `apps/web/public/downloads/awb-ctp-assessment-medicare-guidelines.pdf`
   - `apps/web/public/downloads/lcd-wound-care-l37166.pdf`

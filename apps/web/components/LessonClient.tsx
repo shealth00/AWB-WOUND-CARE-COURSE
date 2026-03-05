@@ -19,6 +19,34 @@ interface LessonResponse {
   owner: string | null;
 }
 
+function resolveTrackId(trackLabel: string): string {
+  const normalized = trackLabel.toLowerCase();
+
+  if (normalized.includes("provider")) {
+    return "providers";
+  }
+
+  if (normalized.includes("sales")) {
+    return "sales-marketers";
+  }
+
+  if (
+    normalized.includes("post-acute") ||
+    normalized.includes("senior care") ||
+    normalized.includes("snf") ||
+    normalized.includes("nursing home") ||
+    normalized.includes("alf")
+  ) {
+    return "post-acute-senior-care";
+  }
+
+  if (normalized.includes("asc") || normalized.includes("ortho")) {
+    return "asc-ortho";
+  }
+
+  return "distributors";
+}
+
 export function LessonClient() {
   const params = useParams<{ lessonId: string }>();
   const [lesson, setLesson] = useState<LessonResponse | null>(null);
@@ -57,11 +85,7 @@ export function LessonClient() {
       return;
     }
 
-    const trackId = lesson.track.toLowerCase().includes("provider")
-      ? "providers"
-      : lesson.track.toLowerCase().includes("sales")
-        ? "sales-marketers"
-        : "distributors";
+    const trackId = resolveTrackId(lesson.track);
 
     try {
       const response = await fetch(apiUrl("/progress/lessons"), {
