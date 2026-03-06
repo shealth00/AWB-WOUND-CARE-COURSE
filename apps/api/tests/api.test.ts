@@ -453,6 +453,46 @@ describe("AWB API", () => {
     expect(smartsheetMock.shareSheet).not.toHaveBeenCalled();
   });
 
+  it("deletes an uploaded media asset and returns cleanup warning when file is missing", async () => {
+    dbMock.query.mockResolvedValueOnce([
+      {
+        asset_id: "asset-123",
+        media_type: "video",
+        file_size: "2048",
+        storage_path: "ab/asset-123.mp4",
+        storage_name: "asset-123.mp4",
+      },
+    ]);
+
+    const response = await request(app)
+      .delete("/api/admin/assets/asset-123")
+      .set("x-admin-key", "development-admin-key");
+
+    expect(response.status).toBe(200);
+    expect(response.body.deleted).toBe(true);
+    expect(response.body.assetId).toBe("asset-123");
+    expect(response.body.fileDeleted).toBe(false);
+    expect(response.body.warning).toMatch(/already missing/i);
+    expect(dbMock.insertAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "admin.delete-asset",
+        entityType: "media_asset",
+        entityId: "asset-123",
+      }),
+    );
+  });
+
+  it("returns 404 when deleting a media asset that does not exist", async () => {
+    dbMock.query.mockResolvedValueOnce([]);
+
+    const response = await request(app)
+      .delete("/api/admin/assets/missing-asset")
+      .set("x-admin-key", "development-admin-key");
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe("Asset not found.");
+  });
+
   it("validates required metadata for ad-hoc video generation requests", async () => {
     const response = await request(app)
       .post("/api/admin/videos/generate")
