@@ -92,6 +92,32 @@ test("addRows rejects bulk requests above the Smartsheet limit", async () => {
   );
 });
 
+test("updateRows uses the row update endpoint and returns updated rows", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const client = createSmartsheetClient({
+    accessToken: "token-123",
+    fetch: async (input, init) => {
+      calls.push({ url: String(input), init });
+      return createJsonResponse({
+        message: "SUCCESS",
+        resultCode: 0,
+        result: [{ id: 88, cells: [{ columnId: 1, value: "Draft" }] }],
+      });
+    },
+  });
+
+  const rows = await client.updateRows(77, [
+    {
+      id: 88,
+      cells: [{ columnId: 1, value: "Draft" }],
+    },
+  ]);
+
+  assert.equal(calls[0]?.url, "https://api.smartsheet.com/2.0/sheets/77/rows");
+  assert.equal(calls[0]?.init?.method, "PUT");
+  assert.equal(rows[0]?.id, 88);
+});
+
 test("attachFileToRow uploads binary content with Smartsheet headers", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const client = createSmartsheetClient({

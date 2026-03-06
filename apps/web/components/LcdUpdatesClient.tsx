@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiUrl } from "../src/api";
+import { fetchJson } from "../src/http";
 
 interface LcdUpdatesResponse {
   updates: Array<{
@@ -22,8 +22,7 @@ export function LcdUpdatesClient() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void fetch(apiUrl("/lcd-updates"))
-      .then((response) => response.json() as Promise<LcdUpdatesResponse>)
+    void fetchJson<LcdUpdatesResponse>("/lcd-updates")
       .then(setData)
       .catch((reason: unknown) =>
         setError(reason instanceof Error ? reason.message : "Failed to load LCD updates."),

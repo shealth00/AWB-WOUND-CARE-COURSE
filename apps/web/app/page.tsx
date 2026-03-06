@@ -1,5 +1,4 @@
 import { CatalogClient } from "../components/CatalogClient";
-import { webEnv } from "../src/env";
 
 export default function HomePage() {
   return (
@@ -24,32 +23,10 @@ export default function HomePage() {
           tracking, and certificate verification endpoints. Smartsheet remains the operational
           system of record for content and workflow.
         </p>
-        <div className="split" style={{ marginTop: 24 }}>
-          <Card label="API Base URL" value={webEnv.apiBaseUrl} />
-          <Card label="Environment" value={webEnv.appEnv} />
-        </div>
       </section>
       <section style={{ marginTop: 24 }}>
         <CatalogClient />
       </section>
     </main>
-  );
-}
-
-function Card({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        padding: 20,
-        borderRadius: 18,
-        background: "#fcf7ef",
-        border: "1px solid var(--border)",
-      }}
-    >
-      <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em" }}>
-        {label}
-      </div>
-      <div style={{ marginTop: 8, fontSize: 20 }}>{value}</div>
-    </div>
   );
 }

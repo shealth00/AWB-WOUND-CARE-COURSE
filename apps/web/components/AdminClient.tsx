@@ -10,6 +10,24 @@ interface DashboardResponse {
   syncRuns: Array<Record<string, unknown>>;
 }
 
+interface MediaAsset {
+  assetId: string;
+  title: string;
+  description: string | null;
+  mediaType: "video" | "audio" | "pdf";
+  mimeType: string;
+  fileSize: number;
+  durationSec: number | null;
+  pageCount: number | null;
+  processingStatus: string;
+  processingNotes: string | null;
+  createdAt: string;
+}
+
+interface AdminCatalogResponse {
+  lessons: CatalogLesson[];
+}
+
 interface LoginResponse {
   loggedIn: boolean;
   token: string;
@@ -18,22 +36,147 @@ interface LoginResponse {
   expiresInSec: number;
 }
 
+interface DiagnosticResult {
+  endpoint: string;
+  ok: boolean;
+  status: number | null;
+  latencyMs: number;
+  detail: string;
+}
+
 const ADMIN_TOKEN_KEY = "awb-admin-token";
+
+type VideoGenerationStatus =
+  | "queued"
+  | "processing"
+  | "rendering"
+  | "uploading"
+  | "completed"
+  | "failed";
+
+interface CatalogLesson {
+  lesson_id: string;
+  source_row_id: string | null;
+  track: string;
+  module_id: string;
+  module_title: string;
+  lesson_title: string;
+  publish_status: string;
+  video_url?: string | null;
+}
+
+interface VideoGenerationJob {
+  jobId: string;
+  lessonId: string | null;
+  sourceRowId: string | null;
+  assetId: string | null;
+  assetContentUrl: string | null;
+  status: VideoGenerationStatus;
+  voiceId: string;
+  warnings: string[];
+  errorMessage: string | null;
+  createdBy: string;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  payload: {
+    lessonTitle: string | null;
+    moduleTitle: string | null;
+    track: string | null;
+    owner: string | null;
+    voiceEngine: string | null;
+    renderWidth: number | null;
+    renderHeight: number | null;
+    renderFps: number | null;
+    publishAfterGenerate: boolean | null;
+    overwriteExistingVideo: boolean | null;
+  };
+}
+
+function buildCanonicalPayload(lesson?: CatalogLesson): string {
+  const payload = {
+    lessonId: lesson?.lesson_id ?? "",
+    voice: {
+      provider: "aws-polly",
+      voiceId: "Joanna",
+      engine: "neural",
+    },
+    render: {
+      width: 1920,
+      height: 1080,
+      fps: 30,
+    },
+    brand: {
+      logoUrl: "https://cdn.example.com/brand/logo.png",
+      primaryColor: "#0F3D75",
+      accentColor: "#2E89FF",
+      fontFamily: "Inter",
+    },
+    lessonMeta: {
+      track: lesson?.track ?? "Provider Track",
+      moduleTitle: lesson?.module_title ?? "Infection, Biofilm, Inflammation",
+      lessonTitle: lesson?.lesson_title ?? "Lesson 3: Recognizing stalled healing",
+    },
+    slides: [
+      {
+        id: "s1",
+        layout: "title",
+        title: "Recognizing stalled healing",
+        narration:
+          "In this lesson, we will identify clinical signs that a wound has stopped progressing through normal healing.",
+      },
+      {
+        id: "s2",
+        layout: "bullets",
+        title: "Three warning signs",
+        bullets: [
+          "Persistent inflammation",
+          "Non-advancing wound edge",
+          "Increase in exudate or odor",
+        ],
+        narration:
+          "Three common warning signs include persistent inflammation, failure of the wound edge to advance, and a change in drainage or odor.",
+      },
+      {
+        id: "s3",
+        layout: "callout",
+        title: "Documentation tip",
+        callout: "Describe changes over time, not just one visit.",
+        narration:
+          "When documenting stalled healing, compare findings over time rather than describing a single encounter in isolation.",
+      },
+    ],
+  };
+
+  return JSON.stringify(payload, null, 2);
+}
 
 export function AdminClient() {
   const [token, setToken] = useState("");
-  const [apiKey, setApiKey] = useState("development-admin-key");
+  const [apiKey, setApiKey] = useState("");
   const [role, setRole] = useState("admin");
   const [actor, setActor] = useState("awb-ops");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [forms, setForms] = useState<Array<Record<string, unknown>>>([]);
+  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
+  const [catalogLessons, setCatalogLessons] = useState<AdminCatalogResponse["lessons"]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [shareEmail, setShareEmail] = useState("");
   const [shareSheetType, setShareSheetType] = useState("forms");
   const [busy, setBusy] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticResult[]>([]);
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+  const [uploadingAsset, setUploadingAsset] = useState(false);
+  const [videoJobs, setVideoJobs] = useState<VideoGenerationJob[]>([]);
+  const [videoJobsBusy, setVideoJobsBusy] = useState(false);
+  const [generateBusy, setGenerateBusy] = useState(false);
+  const [selectedLessonId, setSelectedLessonId] = useState("");
+  const [publishAfterGenerate, setPublishAfterGenerate] = useState(true);
+  const [overwriteExistingVideo, setOverwriteExistingVideo] = useState(false);
+  const [videoPayloadJson, setVideoPayloadJson] = useState(buildCanonicalPayload());
 
   useEffect(() => {
     const saved = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -43,11 +186,8 @@ export function AdminClient() {
     }
   }, []);
 
-  function adminHeaders() {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-
+  function adminAuthHeaders() {
+    const headers: Record<string, string> = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;
       return headers;
@@ -57,6 +197,13 @@ export function AdminClient() {
     headers["x-awb-role"] = role;
     headers["x-awb-actor"] = actor;
     return headers;
+  }
+
+  function adminHeaders() {
+    return {
+      "Content-Type": "application/json",
+      ...adminAuthHeaders(),
+    };
   }
 
   async function login() {
@@ -179,27 +326,133 @@ export function AdminClient() {
     setError(null);
 
     try {
-      const [dashboardResponse, formsResponse] = await Promise.all([
+      const [dashboardResponse, formsResponse, catalogResponse, assetsResponse, jobsResponse] = await Promise.all([
         fetch(apiUrl("/admin/dashboard"), {
           headers: adminHeaders(),
         }),
         fetch(apiUrl("/admin/forms"), {
           headers: adminHeaders(),
         }),
+        fetch(apiUrl("/admin/catalog"), {
+          headers: adminHeaders(),
+        }),
+        fetch(apiUrl("/admin/assets"), {
+          headers: adminHeaders(),
+        }),
+        fetch(apiUrl("/admin/generate-lesson-video?limit=30"), {
+          headers: adminHeaders(),
+        }),
       ]);
 
-      if (!dashboardResponse.ok || !formsResponse.ok) {
+      if (!dashboardResponse.ok || !formsResponse.ok || !catalogResponse.ok || !assetsResponse.ok || !jobsResponse.ok) {
         throw new Error("Admin lookup failed.");
       }
 
       const dashboardPayload = (await dashboardResponse.json()) as DashboardResponse;
       const formsPayload = (await formsResponse.json()) as { forms: Array<Record<string, unknown>> };
+      const catalogPayload = (await catalogResponse.json()) as AdminCatalogResponse;
+      const assetsPayload = (await assetsResponse.json()) as { assets: MediaAsset[] };
+      const jobsPayload = (await jobsResponse.json()) as { jobs: VideoGenerationJob[] };
 
       setDashboard(dashboardPayload);
       setForms(formsPayload.forms);
+      setCatalogLessons(catalogPayload.lessons);
+      setMediaAssets(assetsPayload.assets);
+      setVideoJobs(jobsPayload.jobs ?? []);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Admin lookup failed.");
     }
+  }
+
+  async function loadVideoJobs(limit = 30, silent = false) {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    if (!silent) {
+      setVideoJobsBusy(true);
+    }
+
+    try {
+      const response = await fetch(apiUrl(`/admin/generate-lesson-video?limit=${limit}`), {
+        headers: adminHeaders(),
+      });
+      const payload = (await response.json()) as { jobs?: VideoGenerationJob[]; error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Video job lookup failed.");
+      }
+
+      setVideoJobs(payload.jobs ?? []);
+    } catch (reason) {
+      if (!silent) {
+        setError(reason instanceof Error ? reason.message : "Video job lookup failed.");
+      }
+    } finally {
+      if (!silent) {
+        setVideoJobsBusy(false);
+      }
+    }
+  }
+
+  async function generateLessonVideo() {
+    setError(null);
+    setNotice(null);
+    setGenerateBusy(true);
+
+    try {
+      const parsed = JSON.parse(videoPayloadJson) as Record<string, unknown>;
+
+      if (selectedLessonId.trim() && typeof parsed.lessonId !== "string") {
+        parsed.lessonId = selectedLessonId.trim();
+      }
+
+      parsed.publishAfterGenerate = publishAfterGenerate;
+      parsed.overwriteExistingVideo = overwriteExistingVideo;
+
+      const response = await fetch(apiUrl("/admin/generate-lesson-video"), {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify(parsed),
+      });
+      const payload = (await response.json()) as {
+        jobId?: string;
+        lessonId?: string | null;
+        status?: string;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Video generation request failed.");
+      }
+
+      await loadVideoJobs();
+      setNotice(
+        `Video generation job queued: ${payload.jobId ?? "unknown"}${
+          payload.lessonId ? ` for ${payload.lessonId}` : ""
+        }.`,
+      );
+    } catch (reason) {
+      const message =
+        reason instanceof SyntaxError
+          ? "Generation payload JSON is invalid."
+          : reason instanceof Error
+            ? reason.message
+            : "Video generation request failed.";
+      setError(message);
+    } finally {
+      setGenerateBusy(false);
+    }
+  }
+
+  function applyLessonTemplate(lessonId: string) {
+    const lesson = catalogLessons.find((item) => item.lesson_id === lessonId);
+    if (!lesson) {
+      return;
+    }
+
+    setSelectedLessonId(lesson.lesson_id);
+    setVideoPayloadJson(buildCanonicalPayload(lesson));
+    setNotice(`Loaded canonical payload template for ${lesson.lesson_id}.`);
   }
 
   async function shareCurrentSheet() {
@@ -229,7 +482,148 @@ export function AdminClient() {
     }
   }
 
-  const isAuthenticated = Boolean(token || apiKey);
+  async function updatePublishStatus(lessonId: string, publishStatus: "Published" | "Draft") {
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(apiUrl(`/admin/lessons/${encodeURIComponent(lessonId)}/publish`), {
+        method: "POST",
+        headers: adminHeaders(),
+        body: JSON.stringify({ publishStatus }),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        smartsheetSynced?: boolean;
+        syncWarning?: string | null;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Publish status update failed.");
+      }
+
+      setCatalogLessons((current) =>
+        current.map((lesson) =>
+          lesson.lesson_id === lessonId
+            ? { ...lesson, publish_status: publishStatus }
+            : lesson,
+        ),
+      );
+      setNotice(
+        payload.smartsheetSynced
+          ? `Lesson ${lessonId} set to ${publishStatus}.`
+          : `Lesson ${lessonId} set to ${publishStatus}. ${payload.syncWarning ?? "Smartsheet sync warning."}`,
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Publish status update failed.");
+    }
+  }
+
+  async function uploadAsset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+    setUploadingAsset(true);
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    try {
+      const response = await fetch(apiUrl("/admin/assets/upload"), {
+        method: "POST",
+        headers: adminAuthHeaders(),
+        body: formData,
+      });
+      const payload = (await response.json()) as MediaAsset | { error?: string };
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error ?? "Asset upload failed." : "Asset upload failed.");
+      }
+
+      setMediaAssets((current) => [payload as MediaAsset, ...current]);
+      form.reset();
+      setNotice("Asset uploaded and processed.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Asset upload failed.");
+    } finally {
+      setUploadingAsset(false);
+    }
+  }
+
+  async function runDiagnostics() {
+    setDiagnosticsBusy(true);
+    setError(null);
+    setNotice(null);
+
+    const endpoints = ["/health", "/catalog", "/quiz/config"];
+
+    try {
+      const results = await Promise.all(
+        endpoints.map(async (path): Promise<DiagnosticResult> => {
+          const endpoint = apiUrl(path);
+          const startedAt = performance.now();
+
+          try {
+            const response = await fetch(endpoint);
+            const latencyMs = Math.round(performance.now() - startedAt);
+            const detail = await readResponseDetail(response);
+
+            return {
+              endpoint,
+              ok: response.ok,
+              status: response.status,
+              latencyMs,
+              detail,
+            };
+          } catch (reason) {
+            return {
+              endpoint,
+              ok: false,
+              status: null,
+              latencyMs: Math.round(performance.now() - startedAt),
+              detail:
+                reason instanceof Error
+                  ? reason.message
+                  : "Network request failed",
+            };
+          }
+        }),
+      );
+
+      setDiagnostics(results);
+      const failing = results.filter((result) => !result.ok);
+      if (failing.length > 0) {
+        setError(
+          `Diagnostics found ${failing.length} failing endpoint(s).`,
+        );
+      } else {
+        setNotice("Diagnostics passed for health/catalog/quiz-config.");
+      }
+    } finally {
+      setDiagnosticsBusy(false);
+    }
+  }
+
+  const isAuthenticated = Boolean(token || apiKey.trim());
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      const hasActiveJob = videoJobs.some((job) =>
+        ["queued", "processing", "rendering", "uploading"].includes(job.status),
+      );
+      if (hasActiveJob) {
+        void loadVideoJobs(30, true);
+      }
+    }, 12000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [isAuthenticated, videoJobs]);
 
   return (
     <div className="grid">
@@ -331,16 +725,254 @@ export function AdminClient() {
         </div>
       </section>
 
+      <section className="card">
+        <h2>Media upload (video/audio/PDF)</h2>
+        <form onSubmit={uploadAsset}>
+          <div className="split">
+            <label className="field">
+              Title
+              <input name="title" placeholder="Optional: defaults to file name" />
+            </label>
+            <label className="field">
+              Description
+              <input name="description" placeholder="Optional description" />
+            </label>
+          </div>
+          <label className="field">
+            File
+            <input accept="video/*,audio/*,application/pdf" name="file" required type="file" />
+          </label>
+          <div className="actions">
+            <button className="button" disabled={!isAuthenticated || uploadingAsset} type="submit">
+              {uploadingAsset ? "Uploading..." : "Upload asset"}
+            </button>
+            <a className="button secondary" href="/library">
+              Open library viewer
+            </a>
+          </div>
+        </form>
+      </section>
+
+      <section className="card">
+        <details>
+          <summary>Diagnostics (hidden)</summary>
+          <p className="muted">
+            Runs GET checks for `/api/health`, `/api/catalog`, and `/api/quiz/config`.
+          </p>
+          <div className="actions">
+            <button
+              className="button secondary"
+              disabled={diagnosticsBusy}
+              onClick={() => void runDiagnostics()}
+              type="button"
+            >
+              {diagnosticsBusy ? "Running..." : "Run diagnostics"}
+            </button>
+          </div>
+          {diagnostics.length > 0 ? (
+            <div className="stack" style={{ marginTop: 16 }}>
+              {diagnostics.map((result) => (
+                <div className="question" key={result.endpoint}>
+                  <strong>{result.endpoint}</strong>
+                  <div className={result.ok ? "status-good" : "status-bad"}>
+                    {result.ok ? "OK" : "Fail"} / status{" "}
+                    {result.status === null ? "n/a" : result.status} /{" "}
+                    {result.latencyMs}ms
+                  </div>
+                  <div className="mono muted">{result.detail}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </details>
+      </section>
+
       {notice ? <div className="card status-good">{notice}</div> : null}
       {error ? <div className="card status-bad">{error}</div> : null}
 
       {dashboard ? (
-        <section className="split">
-          <DataCard title="Recent sync runs" rows={dashboard.syncRuns} />
-          <DataCard title="Recent webhook events" rows={dashboard.webhooks} />
-          <DataCard title="Recent IVR" rows={dashboard.ivr} />
-          <DataCard title="Recent forms" rows={forms.length > 0 ? forms : dashboard.forms} />
-        </section>
+        <>
+          <section className="split">
+            <DataCard title="Recent sync runs" rows={dashboard.syncRuns} />
+            <DataCard title="Recent webhook events" rows={dashboard.webhooks} />
+            <DataCard title="Recent IVR" rows={dashboard.ivr} />
+            <DataCard title="Recent forms" rows={forms.length > 0 ? forms : dashboard.forms} />
+          </section>
+          <section className="card">
+            <h2>Media assets</h2>
+            <div className="stack">
+              {mediaAssets.length > 0 ? (
+                mediaAssets.slice(0, 100).map((asset) => (
+                  <div className="question" key={asset.assetId}>
+                    <strong>{asset.title}</strong>
+                    <div className="muted">
+                      {asset.mediaType.toUpperCase()} / {(asset.fileSize / (1024 * 1024)).toFixed(1)} MB /{" "}
+                      {asset.processingStatus}
+                    </div>
+                    <div className="actions">
+                      <a
+                        className="button secondary"
+                        href={apiUrl(`/assets/${encodeURIComponent(asset.assetId)}/content`)}
+                        target="_blank"
+                      >
+                        Open
+                      </a>
+                      <a
+                        className="button secondary"
+                        href={`${apiUrl(`/assets/${encodeURIComponent(asset.assetId)}/content`)}?download=1`}
+                        target="_blank"
+                      >
+                        Download
+                      </a>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="muted">No uploaded media assets yet.</div>
+              )}
+            </div>
+          </section>
+          <section className="card">
+            <h2>Lesson publish controls</h2>
+            <div className="stack">
+              {catalogLessons.slice(0, 80).map((lesson) => (
+                <div className="question" key={lesson.lesson_id}>
+                  <strong>
+                    {lesson.module_id} / {lesson.lesson_title}
+                  </strong>
+                  <div className="muted">
+                    {lesson.track} / {lesson.publish_status}
+                  </div>
+                  <div className="actions">
+                    <button
+                      className="button secondary"
+                      disabled={!isAuthenticated || lesson.publish_status === "Published"}
+                      onClick={() => void updatePublishStatus(lesson.lesson_id, "Published")}
+                      type="button"
+                    >
+                      Publish
+                    </button>
+                    <button
+                      className="button secondary"
+                      disabled={!isAuthenticated || lesson.publish_status === "Draft"}
+                      onClick={() => void updatePublishStatus(lesson.lesson_id, "Draft")}
+                      type="button"
+                    >
+                      Unpublish
+                    </button>
+                    <button
+                      className="button secondary"
+                      disabled={!isAuthenticated}
+                      onClick={() => applyLessonTemplate(lesson.lesson_id)}
+                      type="button"
+                    >
+                      Use in generator
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="card">
+            <h2>Lesson video generator</h2>
+            <p className="muted">
+              Submit canonical JSON payloads to queue video generation jobs and auto-update lesson VideoUrl.
+            </p>
+            <div className="split">
+              <label className="field">
+                Target lesson (optional)
+                <select onChange={(event) => setSelectedLessonId(event.target.value)} value={selectedLessonId}>
+                  <option value="">Ad-hoc payload</option>
+                  {catalogLessons.slice(0, 200).map((lesson) => (
+                    <option key={lesson.lesson_id} value={lesson.lesson_id}>
+                      {lesson.lesson_id} / {lesson.lesson_title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                Publish after generate
+                <input
+                  checked={publishAfterGenerate}
+                  onChange={(event) => setPublishAfterGenerate(event.target.checked)}
+                  type="checkbox"
+                />
+              </label>
+              <label className="field">
+                Overwrite existing VideoUrl
+                <input
+                  checked={overwriteExistingVideo}
+                  onChange={(event) => setOverwriteExistingVideo(event.target.checked)}
+                  type="checkbox"
+                />
+              </label>
+            </div>
+            <label className="field">
+              Canonical payload JSON
+              <textarea
+                onChange={(event) => setVideoPayloadJson(event.target.value)}
+                rows={16}
+                style={{ fontFamily: "monospace", minHeight: 320 }}
+                value={videoPayloadJson}
+              />
+            </label>
+            <div className="actions">
+              <button className="button secondary" onClick={() => setVideoPayloadJson(buildCanonicalPayload())} type="button">
+                Reset template
+              </button>
+              <button className="button" disabled={!isAuthenticated || generateBusy} onClick={() => void generateLessonVideo()} type="button">
+                {generateBusy ? "Queueing..." : "Generate lesson video"}
+              </button>
+              <button
+                className="button secondary"
+                disabled={!isAuthenticated || videoJobsBusy}
+                onClick={() => void loadVideoJobs()}
+                type="button"
+              >
+                {videoJobsBusy ? "Refreshing..." : "Refresh jobs"}
+              </button>
+            </div>
+            <div className="stack" style={{ marginTop: 16 }}>
+              {videoJobs.length > 0 ? (
+                videoJobs.map((job) => (
+                  <div className="question" key={job.jobId}>
+                    <strong>
+                      {job.jobId} / {job.status}
+                    </strong>
+                    <div className="muted">
+                      Lesson: {job.lessonId ?? "ad-hoc"} / Voice: {job.voiceId} / Created:{" "}
+                      {new Date(job.createdAt).toLocaleString()}
+                    </div>
+                    <div className="muted">
+                      {job.payload.track ?? "N/A"} / {job.payload.moduleTitle ?? "N/A"} /{" "}
+                      {job.payload.lessonTitle ?? "N/A"}
+                    </div>
+                    {job.errorMessage ? <div className="status-bad">{job.errorMessage}</div> : null}
+                    {job.warnings.length > 0 ? (
+                      <div className="muted">Warnings: {job.warnings.join(" | ")}</div>
+                    ) : null}
+                    <div className="actions">
+                      <a
+                        className="button secondary"
+                        href={apiUrl(`/admin/generate-lesson-video/${encodeURIComponent(job.jobId)}`)}
+                        target="_blank"
+                      >
+                        Open JSON
+                      </a>
+                      {job.assetContentUrl ? (
+                        <a className="button secondary" href={apiUrl(job.assetContentUrl)} target="_blank">
+                          Open video
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="muted">No generation jobs yet.</div>
+              )}
+            </div>
+          </section>
+        </>
       ) : null}
     </div>
   );
@@ -369,4 +1001,22 @@ function DataCard({
       </div>
     </div>
   );
+}
+
+async function readResponseDetail(response: Response): Promise<string> {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    const payload = (await response.json().catch(() => null)) as
+      | Record<string, unknown>
+      | null;
+    return truncate(JSON.stringify(payload ?? {}, null, 2));
+  }
+
+  const text = await response.text().catch(() => "");
+  return truncate(text || `${response.status} ${response.statusText}`);
+}
+
+function truncate(value: string): string {
+  return value.length > 700 ? `${value.slice(0, 700)}...` : value;
 }

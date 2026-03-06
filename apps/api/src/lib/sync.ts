@@ -15,8 +15,8 @@ export async function syncContent(source: string): Promise<SyncSummary> {
   ]);
 
   const catalogRows = sheetRowToObject(catalogSheet)
-    .filter((row) => (row.PublishStatus ?? "").toLowerCase() === "published")
     .map((row) => ({
+      sourceRowId: row._rowId,
       lessonId: row.LessonId,
       track: row.Track,
       moduleId: row.ModuleId,
@@ -78,7 +78,7 @@ export async function syncContent(source: string): Promise<SyncSummary> {
   return summary;
 }
 
-export async function listTracks() {
+export async function listTracks(includeDraft = false) {
   return query<{
     track: string;
     module_id: string;
@@ -88,15 +88,18 @@ export async function listTracks() {
     `
       select track, module_id, module_title, count(*)::text as lesson_count
       from content_lessons
+      where ($1::boolean = true or publish_status = 'Published')
       group by track, module_id, module_title
       order by track asc, module_title asc
     `,
+    [includeDraft],
   );
 }
 
-export async function listLessonsByTrack(track?: string) {
+export async function listLessonsByTrack(track?: string, includeDraft = false) {
   return query<{
     lesson_id: string;
+    source_row_id: string | null;
     track: string;
     module_id: string;
     module_title: string;
@@ -111,18 +114,20 @@ export async function listLessonsByTrack(track?: string) {
   }>(
     `
       select lesson_id, track, module_id, module_title, lesson_title, video_url, duration_min,
-        objectives, downloads, publish_status, version, owner
+        objectives, downloads, publish_status, version, owner, source_row_id
       from content_lessons
       where ($1::text is null or track = $1)
+        and ($2::boolean = true or publish_status = 'Published')
       order by track asc, module_id asc, lesson_title asc
     `,
-    [track ?? null],
+    [track ?? null, includeDraft],
   );
 }
 
-export async function getLesson(lessonId: string) {
+export async function getLesson(lessonId: string, includeDraft = false) {
   const rows = await query<{
     lesson_id: string;
+    source_row_id: string | null;
     track: string;
     module_id: string;
     module_title: string;
@@ -137,12 +142,13 @@ export async function getLesson(lessonId: string) {
   }>(
     `
       select lesson_id, track, module_id, module_title, lesson_title, video_url, duration_min,
-        objectives, downloads, publish_status, version, owner
+        objectives, downloads, publish_status, version, owner, source_row_id
       from content_lessons
       where lesson_id = $1
+        and ($2::boolean = true or publish_status = 'Published')
       limit 1
     `,
-    [lessonId],
+    [lessonId, includeDraft],
   );
 
   return rows[0] ?? null;
@@ -151,6 +157,7 @@ export async function getLesson(lessonId: string) {
 async function insertCatalogRow(
   client: PoolClient,
   row: {
+    sourceRowId: string;
     lessonId: string;
     track: string;
     moduleId: string;
@@ -168,13 +175,14 @@ async function insertCatalogRow(
   await client.query(
     `
       insert into content_lessons (
-        lesson_id, track, module_id, module_title, lesson_title, video_url, duration_min,
+        lesson_id, source_row_id, track, module_id, module_title, lesson_title, video_url, duration_min,
         objectives, downloads, publish_status, version, owner
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13)
     `,
     [
       row.lessonId,
+      row.sourceRowId || null,
       row.track,
       row.moduleId,
       row.moduleTitle,

@@ -43,6 +43,15 @@ textarea {
   min-height: 100vh;
 }
 
+.api-banner {
+  margin: 16px 24px 0;
+  border: 1px solid #e3b6b6;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fff1f1;
+  font-size: 0.95rem;
+}
+
 .site-header {
   display: flex;
   justify-content: space-between;
@@ -178,6 +187,22 @@ textarea {
 .stack {
   display: grid;
   gap: 12px;
+}
+
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 12px;
 }
 
 .mono {
