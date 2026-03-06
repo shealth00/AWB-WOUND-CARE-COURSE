@@ -2842,6 +2842,73 @@ app.post(
   },
 );
 
+app.delete(["/admin/assets/:assetId", "/api/admin/assets/:assetId"], requireAdmin, async (req, res) => {
+  const assetId = getRouteParam(req.params.assetId).trim();
+
+  if (!assetId) {
+    res.status(400).json({ error: "Asset ID is required." });
+    return;
+  }
+
+  const admin = getAdminIdentity(req);
+  const [deletedRow] = await query<
+    Pick<MediaAssetRow, "asset_id" | "media_type" | "file_size" | "storage_path" | "storage_name">
+  >(
+    `
+      delete from media_assets
+      where asset_id = $1
+      returning asset_id, media_type, file_size::text, storage_path, storage_name
+    `,
+    [assetId],
+  );
+
+  if (!deletedRow) {
+    res.status(404).json({ error: "Asset not found." });
+    return;
+  }
+
+  let warning: string | null = null;
+  let fileDeleted = false;
+
+  try {
+    const absolutePath = resolveStoredMediaPath(deletedRow.storage_path);
+    try {
+      await fs.unlink(absolutePath);
+      fileDeleted = true;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        warning = "Asset record deleted, but stored media file was already missing.";
+      } else {
+        warning = "Asset record deleted, but media file cleanup failed.";
+      }
+    }
+  } catch {
+    warning = "Asset record deleted, but stored media path was invalid.";
+  }
+
+  await insertAuditLog({
+    actor: admin.actor,
+    role: admin.role,
+    action: "admin.delete-asset",
+    entityType: "media_asset",
+    entityId: deletedRow.asset_id,
+    details: {
+      mediaType: deletedRow.media_type,
+      fileSize: Number(deletedRow.file_size),
+      fileDeleted,
+      warning,
+    },
+  });
+
+  res.json({
+    deleted: true,
+    assetId: deletedRow.asset_id,
+    fileDeleted,
+    warning,
+  });
+});
+
 app.get(
   ["/admin/videos/generate", "/api/admin/videos/generate", "/admin/generate-lesson-video", "/api/admin/generate-lesson-video"],
   requireAdmin,

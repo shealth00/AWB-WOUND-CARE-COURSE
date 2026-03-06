@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { fetchJson } from "../src/http";
+import { UniversalVideoPlayer } from "./UniversalVideoPlayer";
 
 interface LessonResponse {
   lesson_id: string;
@@ -113,10 +114,11 @@ export function LessonClient() {
         </p>
         {lesson.video_url ? (
           <div className="card">
-            <video controls preload="metadata" style={{ borderRadius: 12, width: "100%" }}>
-              <source src={lesson.video_url} />
-              Your browser does not support embedded video playback.
-            </video>
+            <UniversalVideoPlayer
+              mimeType="video/mp4"
+              src={lesson.video_url}
+              title={lesson.lesson_title}
+            />
             <div className="actions" style={{ marginTop: 12 }}>
               <a className="button secondary" href={lesson.video_url} target="_blank" rel="noreferrer">
                 Open video in new tab
