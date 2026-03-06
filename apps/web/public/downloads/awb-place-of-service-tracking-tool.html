@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AWB Place of Service Tracking Tool</title>
+  <style>
+    :root {
+      --navy: #143d73;
+      --teal: #1c9ab7;
+      --teal-light: #eaf6f8;
+      --line: #c9dfe6;
+      --text: #243746;
+      --muted: #64748b;
+      --white: #ffffff;
+      --bg: #f6fbfc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #f9fcfd 0%, #eef6f8 100%);
+    }
+    .wrap {
+      max-width: 1220px;
+      margin: 24px auto;
+      padding: 0 16px 28px;
+    }
+    .card {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 8px 28px rgba(20, 61, 115, 0.08);
+      overflow: hidden;
+    }
+    .topbar {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(90deg, rgba(20,61,115,0.04), rgba(28,154,183,0.04));
+    }
+    .logo {
+      width: 78px;
+      height: 78px;
+      object-fit: contain;
+      border-radius: 14px;
+      background: white;
+      padding: 6px;
+      border: 1px solid var(--line);
+    }
+    h1 {
+      margin: 0 0 4px;
+      font-size: 34px;
+      color: var(--navy);
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.5;
+      max-width: 840px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 430px 1fr;
+      gap: 18px;
+      padding: 18px;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      background: #fff;
+    }
+    .panel h2 {
+      margin: 0 0 14px;
+      font-size: 19px;
+      color: var(--navy);
+    }
+    .muted { color: var(--muted); }
+    .section-label {
+      margin: 14px 0 8px;
+      font-size: 13px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .row2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    label {
+      display: block;
+      margin: 0 0 6px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 11px 12px;
+      font-size: 14px;
+      color: var(--text);
+      background: white;
+      outline: none;
+    }
+    textarea { min-height: 88px; resize: vertical; }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(28,154,183,0.12);
+    }
+    .selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      background: var(--white);
+    }
+    .pill input { width: auto; margin: 0; }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .primary { background: var(--navy); color: white; }
+    .secondary { background: var(--teal-light); color: var(--navy); border: 1px solid var(--line); }
+    .danger { background: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .kpi {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, white 0%, #f8fbfc 100%);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .kpi .num { font-size: 28px; font-weight: 800; color: var(--navy); }
+    .kpi .lbl { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+    .toolbar input, .toolbar select { max-width: 240px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+    }
+    th, td {
+      padding: 11px 10px;
+      border-bottom: 1px solid #e6eef2;
+      text-align: left;
+      vertical-align: top;
+      font-size: 13px;
+    }
+    th {
+      background: var(--teal-light);
+      color: var(--navy);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    tr:hover td { background: #fbfeff; }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #edf7fa;
+      color: var(--navy);
+      border: 1px solid var(--line);
+    }
+    .status {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+      min-height: 18px;
+    }
+    .tiny { font-size: 12px; color: var(--muted); }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .selector { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="topbar">
+        <img class="logo" src="Teal_and_Navy_Logo_for_Healthcare_Brand-removebg-preview-1.webp" alt="AWB logo">
+        <div>
+          <h1>AWB Place of Service Tracking Tool</h1>
+          <div class="sub">Single standardized documentation language across provider clinic, SNF/NH/ALF, ASC, and Ortho workflows. Capture the encounter location once, keep it structured, and export the log for audit, ops, or billing review.</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <h2>Encounter Entry</h2>
+          <div class="row2">
+            <div>
+              <label>Patient Name</label>
+              <input id="patientName" placeholder="Enter patient name">
+            </div>
+            <div>
+              <label>DOB / MRN</label>
+              <input id="dobMrn" placeholder="DOB or MRN">
+            </div>
+          </div>
+          <div class="row2" style="margin-top:12px;">
+            <div>
+              <label>Encounter Date</label>
+              <input id="encounterDate" type="date">
+            </div>
+            <div>
+              <label>Rendering Provider</label>
+              <input id="provider" placeholder="Provider name">
+            </div>
+          </div>
+
+          <div class="section-label">Place of service</div>
+          <div class="selector" id="selectorBox"></div>
+
+          <div class="row2" style="margin-top:12px;">
+            <div>
+              <label>Workflow Bucket</label>
+              <select id="workflow">
+                <option>Provider Clinic</option>
+                <option>SNF / NH / ALF</option>
+                <option>ASC</option>
+                <option>Ortho</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label>Confirmed By</label>
+              <input id="confirmedBy" placeholder="Staff name or initials">
+            </div>
+          </div>
+
+          <div style="margin-top:12px;">
+            <label>Standardized Note Language</label>
+            <textarea id="noteText">Patient evaluated today for wound-related care in the documented place of service noted above. Site of service has been verified and is consistent with the current clinical setting, care team workflow, and documentation requirements for this encounter.</textarea>
+          </div>
+
+          <div style="margin-top:12px;">
+            <label>Internal Notes</label>
+            <textarea id="internalNotes" placeholder="Optional ops, billing, handoff, or audit notes"></textarea>
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="saveBtn">Save Encounter</button>
+            <button class="secondary" id="resetBtn" type="button">Reset Form</button>
+            <button class="secondary" id="csvBtn" type="button">Export CSV</button>
+            <button class="danger" id="clearBtn" type="button">Clear All Data</button>
+          </div>
+          <div class="status" id="status"></div>
+        </div>
+
+        <div class="panel">
+          <div class="kpis">
+            <div class="kpi"><div class="num" id="kpiTotal">0</div><div class="lbl">Total encounters</div></div>
+            <div class="kpi"><div class="num" id="kpiHome">0</div><div class="lbl">Home encounters</div></div>
+            <div class="kpi"><div class="num" id="kpiFacility">0</div><div class="lbl">Facility encounters</div></div>
+            <div class="kpi"><div class="num" id="kpiClinic">0</div><div class="lbl">Clinic / procedure encounters</div></div>
+          </div>
+
+          <div class="toolbar">
+            <input id="searchBox" placeholder="Search patient, provider, or place of service">
+            <select id="filterPos">
+              <option value="">All places of service</option>
+            </select>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Patient</th>
+                <th>POS</th>
+                <th>Workflow</th>
+                <th>Provider</th>
+                <th>Confirmed By</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+          <div class="tiny" style="margin-top:10px;">Data is stored in local browser storage for quick internal tracking. Export CSV for sharing or backup.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const POS_OPTIONS = [
+      'Home',
+      'ALF',
+      'Nursing Home',
+      'SNF',
+      'Office',
+      'ASC',
+      'Ortho Clinic'
+    ];
+
+    const storageKey = 'awb_pos_tracker_v1';
+    const selectorBox = document.getElementById('selectorBox');
+    const filterPos = document.getElementById('filterPos');
+    const tableBody = document.getElementById('tableBody');
+    const statusEl = document.getElementById('status');
+
+    POS_OPTIONS.forEach((label, i) => {
+      const wrap = document.createElement('label');
+      wrap.className = 'pill';
+      wrap.innerHTML = `<input type="radio" name="pos" value="${label}" ${i === 0 ? 'checked' : ''}> <span>${label}</span>`;
+      selectorBox.appendChild(wrap);
+
+      const option = document.createElement('option');
+      option.value = label;
+      option.textContent = label;
+      filterPos.appendChild(option);
+    });
+
+    const fields = {
+      patientName: document.getElementById('patientName'),
+      dobMrn: document.getElementById('dobMrn'),
+      encounterDate: document.getElementById('encounterDate'),
+      provider: document.getElementById('provider'),
+      workflow: document.getElementById('workflow'),
+      confirmedBy: document.getElementById('confirmedBy'),
+      noteText: document.getElementById('noteText'),
+      internalNotes: document.getElementById('internalNotes')
+    };
+
+    function getRecords() {
+      try { return JSON.parse(localStorage.getItem(storageKey) || '[]'); }
+      catch { return []; }
+    }
+
+    function saveRecords(records) {
+      localStorage.setItem(storageKey, JSON.stringify(records));
+    }
+
+    function selectedPos() {
+      return document.querySelector('input[name="pos"]:checked')?.value || '';
+    }
+
+    function setStatus(msg) {
+      statusEl.textContent = msg;
+      setTimeout(() => { if (statusEl.textContent === msg) statusEl.textContent = ''; }, 3500);
+    }
+
+    function resetForm() {
+      Object.values(fields).forEach(el => el.value = '');
+      fields.workflow.value = 'Provider Clinic';
+      fields.noteText.value = 'Patient evaluated today for wound-related care in the documented place of service noted above. Site of service has been verified and is consistent with the current clinical setting, care team workflow, and documentation requirements for this encounter.';
+      document.querySelector('input[name="pos"][value="Home"]').checked = true;
+      fields.encounterDate.valueAsDate = new Date();
+    }
+
+    function upsertRecord() {
+      if (!fields.patientName.value.trim()) return setStatus('Patient name is required.');
+      if (!fields.encounterDate.value) return setStatus('Encounter date is required.');
+      if (!fields.provider.value.trim()) return setStatus('Rendering provider is required.');
+
+      const records = getRecords();
+      const record = {
+        id: crypto.randomUUID(),
+        patientName: fields.patientName.value.trim(),
+        dobMrn: fields.dobMrn.value.trim(),
+        encounterDate: fields.encounterDate.value,
+        provider: fields.provider.value.trim(),
+        pos: selectedPos(),
+        workflow: fields.workflow.value,
+        confirmedBy: fields.confirmedBy.value.trim(),
+        noteText: fields.noteText.value.trim(),
+        internalNotes: fields.internalNotes.value.trim(),
+        createdAt: new Date().toISOString()
+      };
+      records.unshift(record);
+      saveRecords(records);
+      render();
+      setStatus('Encounter saved.');
+      resetForm();
+    }
+
+    function render() {
+      const query = document.getElementById('searchBox').value.trim().toLowerCase();
+      const posFilter = filterPos.value;
+      const records = getRecords();
+      const filtered = records.filter(r => {
+        const hay = [r.patientName, r.provider, r.pos, r.workflow, r.confirmedBy].join(' ').toLowerCase();
+        const matchQuery = !query || hay.includes(query);
+        const matchPos = !posFilter || r.pos === posFilter;
+        return matchQuery && matchPos;
+      });
+
+      tableBody.innerHTML = '';
+      filtered.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.encounterDate}</td>
+          <td><strong>${escapeHtml(r.patientName)}</strong><br><span class="tiny">${escapeHtml(r.dobMrn || '')}</span></td>
+          <td><span class="tag">${escapeHtml(r.pos)}</span></td>
+          <td>${escapeHtml(r.workflow)}</td>
+          <td>${escapeHtml(r.provider)}</td>
+          <td>${escapeHtml(r.confirmedBy || '')}</td>
+          <td><button class="danger" data-id="${r.id}">Delete</button></td>
+        `;
+        tableBody.appendChild(tr);
+      });
+
+      document.getElementById('kpiTotal').textContent = records.length;
+      document.getElementById('kpiHome').textContent = records.filter(r => r.pos === 'Home').length;
+      document.getElementById('kpiFacility').textContent = records.filter(r => ['ALF','Nursing Home','SNF'].includes(r.pos)).length;
+      document.getElementById('kpiClinic').textContent = records.filter(r => ['Office','ASC','Ortho Clinic'].includes(r.pos)).length;
+    }
+
+    function deleteRecord(id) {
+      const next = getRecords().filter(r => r.id !== id);
+      saveRecords(next);
+      render();
+      setStatus('Encounter deleted.');
+    }
+
+    function exportCsv() {
+      const rows = getRecords();
+      if (!rows.length) return setStatus('No records to export.');
+      const headers = ['Encounter Date','Patient Name','DOB / MRN','Place of Service','Workflow','Rendering Provider','Confirmed By','Standardized Note Language','Internal Notes','Created At'];
+      const data = rows.map(r => [r.encounterDate, r.patientName, r.dobMrn, r.pos, r.workflow, r.provider, r.confirmedBy, r.noteText, r.internalNotes, r.createdAt]);
+      const csv = [headers, ...data].map(row => row.map(csvSafe).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'awb_place_of_service_tracking.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus('CSV exported.');
+    }
+
+    function csvSafe(value) {
+      const s = String(value ?? '');
+      return /[",\n]/.test(s) ? '"' + s.replaceAll('"', '""') + '"' : s;
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', upsertRecord);
+    document.getElementById('resetBtn').addEventListener('click', resetForm);
+    document.getElementById('csvBtn').addEventListener('click', exportCsv);
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      if (!confirm('Clear all saved place-of-service tracking data?')) return;
+      saveRecords([]);
+      render();
+      setStatus('All data cleared.');
+    });
+    document.getElementById('searchBox').addEventListener('input', render);
+    filterPos.addEventListener('change', render);
+    tableBody.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-id]');
+      if (btn) deleteRecord(btn.dataset.id);
+    });
+
+    resetForm();
+    render();
+  </script>
+</body>
+</html>

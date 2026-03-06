@@ -114,8 +114,48 @@ async function mockApi(page: Page) {
       return;
     }
 
+    if (normalizedPath === "/health") {
+      await route.fulfill({
+        json: {
+          status: "ok",
+          ok: true,
+          env: "test",
+          version: "0.1.0",
+        },
+      });
+      return;
+    }
+
     if (normalizedPath === "/catalog") {
       await route.fulfill({ json: catalogPayload });
+      return;
+    }
+
+    if (normalizedPath === "/progress/path") {
+      await route.fulfill({
+        json: {
+          userId: "demo-user",
+          track: "Provider Track",
+          trackId: "providers",
+          modules: [
+            {
+              moduleId: "C1",
+              moduleTitle: "Medicare LCD Reality + Coverage Language",
+              firstLessonId: "LESSON-1",
+              totalLessons: 1,
+              completedLessons: 1,
+              unlocked: true,
+              quizUnlocked: true,
+              quizPassed: true,
+              quizLockedReason: null,
+            },
+          ],
+          finalExam: {
+            unlocked: true,
+            reason: null,
+          },
+        },
+      });
       return;
     }
 
@@ -258,6 +298,35 @@ async function mockApi(page: Page) {
       return;
     }
 
+    if (normalizedPath === "/admin/catalog") {
+      await route.fulfill({
+        json: {
+          tracks: catalogPayload.tracks,
+          lessons: [
+            {
+              lesson_id: "LESSON-1",
+              source_row_id: "row-1",
+              track: "Provider Track",
+              module_id: "P1",
+              module_title: "Advanced wound assessment",
+              lesson_title: "Measure like an auditor will read it",
+              publish_status: "Published",
+            },
+          ],
+        },
+      });
+      return;
+    }
+
+    if (normalizedPath === "/admin/assets") {
+      await route.fulfill({
+        json: {
+          assets: [],
+        },
+      });
+      return;
+    }
+
     if (normalizedPath === "/admin/sync") {
       await route.fulfill({
         json: {
@@ -304,7 +373,7 @@ test("runs the global UI check across catalog, quiz, forms, completion, verify, 
   await expect(page.locator("body")).not.toContainText("404");
 
   await page.getByRole("link", { name: "Catalog", exact: true }).click();
-  await page.getByRole("link", { name: "Start Quiz" }).click();
+  await page.getByRole("link", { name: "Take module quiz" }).first().click();
   await expect(page.getByRole("heading", { name: "Module quiz" })).toBeVisible();
   await page.getByLabel("A Serial measurements with a consistent method").check();
   await page.getByRole("button", { name: "Submit quiz" }).click();
@@ -340,6 +409,7 @@ test("runs the global UI check across catalog, quiz, forms, completion, verify, 
 
   await page.getByRole("link", { name: "Admin", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Admin operations" })).toBeVisible();
+  await page.getByLabel("Admin API key").fill("test-admin-key");
   await page.getByRole("button", { name: "Load dashboard" }).click();
   await expect(page.locator("body")).toContainText("Recent sync runs");
   await page.getByRole("button", { name: "Force content sync" }).click();

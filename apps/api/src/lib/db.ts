@@ -10,6 +10,7 @@ export async function initializeDatabase(): Promise<void> {
   await pool.query(`
     create table if not exists content_lessons (
       lesson_id text primary key,
+      source_row_id text unique,
       track text not null,
       module_id text not null,
       module_title text not null,
@@ -170,6 +171,69 @@ export async function initializeDatabase(): Promise<void> {
       submitted_at timestamptz not null default now()
     );
 
+    create table if not exists members (
+      member_id text primary key,
+      email text not null unique,
+      password_hash text not null,
+      first_name text,
+      last_name text,
+      role text not null default 'member',
+      membership_status text not null default 'active',
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_members_email on members (email);
+
+    create table if not exists member_sessions (
+      session_id text primary key,
+      member_id text not null references members(member_id) on delete cascade,
+      token_hash text not null,
+      ip_address text,
+      user_agent text,
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_member_sessions_member on member_sessions (member_id, created_at desc);
+
+    create table if not exists media_assets (
+      asset_id text primary key,
+      title text not null,
+      description text,
+      media_type text not null,
+      mime_type text not null,
+      file_ext text not null,
+      file_size bigint not null,
+      storage_path text not null unique,
+      storage_name text not null,
+      duration_sec integer,
+      page_count integer,
+      processing_status text not null default 'ready',
+      processing_notes text,
+      created_by text not null default 'system',
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_media_assets_type_created_at on media_assets (media_type, created_at desc);
+
+    create table if not exists video_generation_jobs (
+      job_id text primary key,
+      lesson_id text,
+      source_row_id text,
+      asset_id text references media_assets(asset_id) on delete set null,
+      status text not null default 'queued',
+      voice_id text not null default 'Joanna',
+      request_payload jsonb not null default '{}'::jsonb,
+      warnings jsonb not null default '[]'::jsonb,
+      error_message text,
+      created_by text not null default 'system',
+      started_at timestamptz,
+      completed_at timestamptz,
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_video_generation_jobs_created_at on video_generation_jobs (created_at desc);
+    create index if not exists idx_video_generation_jobs_status on video_generation_jobs (status, created_at desc);
+
     create table if not exists verification_lookups (
       lookup_id text primary key,
       certificate_id text not null,
@@ -179,6 +243,7 @@ export async function initializeDatabase(): Promise<void> {
     );
 
     alter table quiz_attempts add column if not exists track_id text;
+    alter table content_lessons add column if not exists source_row_id text;
     alter table certificates add column if not exists id text;
     alter table certificates add column if not exists learner_full_name text;
     alter table certificates add column if not exists learner_email text;
@@ -192,6 +257,25 @@ export async function initializeDatabase(): Promise<void> {
     alter table certificates add column if not exists pdf_url text;
     alter table certificates add column if not exists pdf_storage_url text;
     alter table certificates add column if not exists created_by text;
+    alter table media_assets add column if not exists description text;
+    alter table media_assets add column if not exists duration_sec integer;
+    alter table media_assets add column if not exists page_count integer;
+    alter table media_assets add column if not exists processing_status text not null default 'ready';
+    alter table media_assets add column if not exists processing_notes text;
+    alter table media_assets add column if not exists created_by text not null default 'system';
+    alter table video_generation_jobs add column if not exists lesson_id text;
+    alter table video_generation_jobs add column if not exists source_row_id text;
+    alter table video_generation_jobs add column if not exists asset_id text references media_assets(asset_id) on delete set null;
+    alter table video_generation_jobs add column if not exists status text not null default 'queued';
+    alter table video_generation_jobs add column if not exists voice_id text not null default 'Joanna';
+    alter table video_generation_jobs add column if not exists request_payload jsonb not null default '{}'::jsonb;
+    alter table video_generation_jobs add column if not exists warnings jsonb not null default '[]'::jsonb;
+    alter table video_generation_jobs add column if not exists error_message text;
+    alter table video_generation_jobs add column if not exists created_by text not null default 'system';
+    alter table video_generation_jobs add column if not exists started_at timestamptz;
+    alter table video_generation_jobs add column if not exists completed_at timestamptz;
+    create index if not exists idx_video_generation_jobs_created_at on video_generation_jobs (created_at desc);
+    create index if not exists idx_video_generation_jobs_status on video_generation_jobs (status, created_at desc);
 
     update certificates
     set id = coalesce(id, certificate_id),

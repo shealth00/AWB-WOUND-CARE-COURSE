@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiUrl } from "../src/api";
+import { fetchJson } from "../src/http";
 
 interface CatalogResponse {
   tracks: Array<{
@@ -75,26 +75,69 @@ interface ProgramCatalogResponse {
   };
 }
 
+interface TrackProgressResponse {
+  userId: string;
+  track: string;
+  trackId: string;
+  modules: Array<{
+    moduleId: string;
+    moduleTitle: string;
+    firstLessonId: string | null;
+    totalLessons: number;
+    completedLessons: number;
+    unlocked: boolean;
+    quizUnlocked: boolean;
+    quizPassed: boolean;
+    quizLockedReason: string | null;
+  }>;
+  finalExam: {
+    unlocked: boolean;
+    reason: string | null;
+  };
+}
+
 export function CatalogClient() {
   const [data, setData] = useState<CatalogResponse | null>(null);
   const [program, setProgram] = useState<ProgramCatalogResponse | null>(null);
+  const [selectedTrack, setSelectedTrack] = useState("");
+  const [userId, setUserId] = useState("demo-user");
+  const [progress, setProgress] = useState<TrackProgressResponse | null>(null);
+  const [progressError, setProgressError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void Promise.all([
-      fetch(apiUrl("/catalog")).then((response) => response.json() as Promise<CatalogResponse>),
-      fetch(apiUrl("/program/catalog")).then((response) =>
-        response.json() as Promise<ProgramCatalogResponse>,
-      ),
+      fetchJson<CatalogResponse>("/catalog"),
+      fetchJson<ProgramCatalogResponse>("/program/catalog"),
     ])
       .then(([catalogPayload, programPayload]) => {
         setData(catalogPayload);
         setProgram(programPayload);
+        setSelectedTrack((current) => current || programPayload.tracks[0]?.title || "");
       })
       .catch((reason: unknown) =>
-        setError(reason instanceof Error ? reason.message : "Failed to load catalog."),
+        setError(reason instanceof Error ? reason.message : "API request failed while loading catalog."),
       );
   }, []);
+
+  useEffect(() => {
+    if (!selectedTrack || !userId) {
+      return;
+    }
+
+    setProgressError(null);
+    void fetchJson<TrackProgressResponse>(
+      `/progress/path?userId=${encodeURIComponent(userId)}&track=${encodeURIComponent(selectedTrack)}`,
+    )
+      .then(setProgress)
+      .catch((reason: unknown) =>
+        setProgressError(
+          reason instanceof Error
+            ? reason.message
+            : "Unable to load track progression.",
+        ),
+      );
+  }, [selectedTrack, userId]);
 
   if (error) {
     return <div className="card status-bad">{error}</div>;
@@ -203,21 +246,92 @@ export function CatalogClient() {
         </div>
       </div>
       <div className="split">
-        {data.tracks.map((track) => (
-          <article className="card" key={`${track.track}-${track.module_id}`}>
-            <div className="pill">{track.track}</div>
-            <h2>{track.module_title}</h2>
-            <p className="muted">
-              Module {track.module_id} with {track.lesson_count} lesson
-              {track.lesson_count === "1" ? "" : "s"}.
-            </p>
-            <div className="actions">
-              <a className="button" href={`/quiz?track=${encodeURIComponent(track.track)}&moduleId=${encodeURIComponent(track.module_id)}`}>
-                Start Quiz
-              </a>
+        <div className="card">
+          <h2>Track play-by-play</h2>
+          <div className="split">
+            <label className="field">
+              Track
+              <select
+                onChange={(event) => setSelectedTrack(event.target.value)}
+                value={selectedTrack}
+              >
+                {program.tracks.map((track) => (
+                  <option key={track.id} value={track.title}>
+                    {track.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Learner ID
+              <input
+                onChange={(event) => setUserId(event.target.value)}
+                value={userId}
+              />
+            </label>
+          </div>
+          {progressError ? (
+            <div className="status-bad">{progressError}</div>
+          ) : null}
+          {progress ? (
+            <div className="stack">
+              {progress.modules.map((module) => (
+                <article className="question" key={module.moduleId}>
+                  <div className="pill">{module.moduleId}</div>
+                  <h3>{module.moduleTitle}</h3>
+                  <div className="muted">
+                    Lessons {module.completedLessons}/{module.totalLessons}{" "}
+                    {module.quizPassed ? "/ Quiz passed" : ""}
+                  </div>
+                  {!module.unlocked ? (
+                    <div className="status-warn">
+                      Locked: Complete previous module quiz first.
+                    </div>
+                  ) : null}
+                  {module.unlocked && !module.quizUnlocked ? (
+                    <div className="status-warn">
+                      {module.quizLockedReason}
+                    </div>
+                  ) : null}
+                  <div className="actions">
+                    {module.unlocked && module.firstLessonId ? (
+                      <a
+                        className="button secondary"
+                        href={`/lesson/${encodeURIComponent(module.firstLessonId)}`}
+                      >
+                        Start lesson
+                      </a>
+                    ) : null}
+                    {module.quizUnlocked ? (
+                      <a
+                        className="button"
+                        href={`/quiz?track=${encodeURIComponent(progress.track)}&moduleId=${encodeURIComponent(module.moduleId)}&userId=${encodeURIComponent(userId)}`}
+                      >
+                        Take module quiz
+                      </a>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+              <article className="question">
+                <div className="pill">FINAL</div>
+                <h3>Final exam</h3>
+                {progress.finalExam.unlocked ? (
+                  <a
+                    className="button"
+                    href={`/quiz?track=${encodeURIComponent(progress.track)}&moduleId=FINAL&userId=${encodeURIComponent(userId)}`}
+                  >
+                    Start final exam
+                  </a>
+                ) : (
+                  <div className="status-warn">{progress.finalExam.reason}</div>
+                )}
+              </article>
             </div>
-          </article>
-        ))}
+          ) : (
+            <div className="muted">Loading track progression...</div>
+          )}
+        </div>
       </div>
       <div className="card">
         <h2>Published lessons</h2>
@@ -225,16 +339,30 @@ export function CatalogClient() {
           Current training shell is driven by synced Smartsheet content; the long-form program architecture is exposed separately above.
         </p>
         <div className="stack">
-          {data.lessons.map((lesson) => (
-            <a className="question" href={`/lesson/${encodeURIComponent(lesson.lesson_id)}`} key={lesson.lesson_id}>
-              <strong>{lesson.lesson_title}</strong>
+          {data.lessons.length > 0 ? (
+            data.lessons.map((lesson) => (
+              <a className="question" href={`/lesson/${encodeURIComponent(lesson.lesson_id)}`} key={lesson.lesson_id}>
+                <strong>{lesson.lesson_title}</strong>
+                <div className="muted">
+                  {lesson.track} / {lesson.module_title}
+                  {lesson.duration_min ? ` / ${lesson.duration_min} min` : ""}
+                  {lesson.owner ? ` / Owner: ${lesson.owner}` : ""}
+                </div>
+              </a>
+            ))
+          ) : (
+            <div className="question">
+              <strong>No published lessons.</strong>
               <div className="muted">
-                {lesson.track} / {lesson.module_title}
-                {lesson.duration_min ? ` / ${lesson.duration_min} min` : ""}
-                {lesson.owner ? ` / Owner: ${lesson.owner}` : ""}
+                Publish lessons in the Admin workflow, then re-run content sync.
               </div>
-            </a>
-          ))}
+              <div className="actions">
+                <a className="button secondary" href="/admin">
+                  Open Admin
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

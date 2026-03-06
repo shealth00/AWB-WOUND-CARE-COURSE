@@ -17,6 +17,6 @@ export default defineConfig({
       "NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:3101/mock-api NEXT_PUBLIC_APP_ENV=test npm run build --workspace @awb/web && NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:3101/mock-api NEXT_PUBLIC_APP_ENV=test npm run start --workspace @awb/web -- --hostname 127.0.0.1 --port 3101",
     port: webPort,
     reuseExistingServer: false,
-    timeout: 180_000,
+    timeout: 300_000,
   },
 });

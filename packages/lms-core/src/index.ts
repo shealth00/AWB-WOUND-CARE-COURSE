@@ -74,6 +74,70 @@ export interface IvrRoutingDecision {
   assignedTo: "Clinical Triage" | "Education" | "Revenue Cycle" | "Wound Navigator";
 }
 
+export interface WoundAuditNoteInput {
+  diagnosis?: string;
+  location?: string;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  depthCm?: number | null;
+  necroticTissue?: string;
+  procedure?: string;
+  tissueRemoved?: string;
+  postProcedureStatus?: string;
+  followUpPlan?: string;
+}
+
+export interface WoundAuditScoreResult {
+  score: number;
+  risk: "LOW" | "MEDIUM" | "HIGH";
+  passed: boolean;
+  missingElements: string[];
+}
+
+export interface DebridementNoteInput {
+  diagnosis?: string;
+  woundLocation?: string;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  depthCm?: number | null;
+  tissuePresent?: string;
+  procedureMethod?: string;
+  tissueRemoved?: string;
+  depthRemoved?: "skin" | "subcutaneous" | "muscle" | "bone" | "selective" | string;
+  surfaceAreaSqCm?: number | null;
+  hemostasis?: string;
+  postProcedureStatus?: string;
+  followUpPlan?: string;
+}
+
+export interface DebridementAuditScoreResult {
+  score: number;
+  risk: "LOW" | "MEDIUM" | "HIGH";
+  missingElements: string[];
+}
+
+export interface EscalationEvaluationInput {
+  weeksOfTreatment?: number | null;
+  percentAreaReduction?: number | null;
+  infectionPresent?: boolean;
+  necroticTissuePresent?: boolean;
+  standardCareCompleted?: boolean;
+}
+
+export type EscalationRecommendationCode =
+  | "CONTINUE_STANDARD_CARE"
+  | "STANDARD_CARE_NOT_COMPLETE"
+  | "TREAT_INFECTION"
+  | "DEBRIDEMENT_NEEDED"
+  | "ESCALATE_ADVANCED_MODALITY";
+
+export interface EscalationEvaluationResult {
+  recommendationCode: EscalationRecommendationCode;
+  recommendation: string;
+  graftRecommendation: string;
+  rationale: string[];
+}
+
 export function generateCertificateId(track: string, issuedAt: Date = new Date()): string {
   const normalizedTrack = resolveCertificateTrackCode(track);
   const yyyymmdd = issuedAt.toISOString().slice(0, 10).replaceAll("-", "");
@@ -185,6 +249,251 @@ export function routeIvr(input: IvrRoutingInput): IvrRoutingDecision {
   };
 }
 
+export function scoreAuditReadyWoundNote(note: WoundAuditNoteInput): WoundAuditScoreResult {
+  let score = 0;
+  const missingElements: string[] = [];
+
+  if (hasText(note.diagnosis)) {
+    score += 10;
+  } else {
+    missingElements.push("diagnosis");
+  }
+
+  if (isPositiveNumber(note.lengthCm) && isPositiveNumber(note.widthCm) && isPositiveNumber(note.depthCm)) {
+    score += 20;
+  } else {
+    missingElements.push("wound dimensions (LxWxD)");
+  }
+
+  if (hasText(note.necroticTissue)) {
+    score += 10;
+  } else {
+    missingElements.push("necrotic tissue description");
+  }
+
+  if (hasText(note.procedure)) {
+    score += 20;
+  } else {
+    missingElements.push("procedure description");
+  }
+
+  if (hasText(note.tissueRemoved)) {
+    score += 20;
+  } else {
+    missingElements.push("tissue removed");
+  }
+
+  if (hasText(note.postProcedureStatus)) {
+    score += 10;
+  } else {
+    missingElements.push("post-procedure wound status");
+  }
+
+  if (hasText(note.followUpPlan)) {
+    score += 10;
+  } else {
+    missingElements.push("follow-up plan");
+  }
+
+  const risk: "LOW" | "MEDIUM" | "HIGH" =
+    score >= 90 ? "LOW" : score >= 70 ? "MEDIUM" : "HIGH";
+
+  return {
+    score,
+    risk,
+    passed: score >= 90,
+    missingElements,
+  };
+}
+
+export function generateAuditReadyWoundNote(note: WoundAuditNoteInput): string {
+  const length = isPositiveNumber(note.lengthCm) ? note.lengthCm.toFixed(1) : "n/a";
+  const width = isPositiveNumber(note.widthCm) ? note.widthCm.toFixed(1) : "n/a";
+  const depth = isPositiveNumber(note.depthCm) ? note.depthCm.toFixed(1) : "n/a";
+
+  return [
+    `Diagnosis: ${note.diagnosis?.trim() || "n/a"}`,
+    `Location: ${note.location?.trim() || "n/a"}`,
+    `Size (cm): ${length} x ${width} x ${depth}`,
+    `Necrotic tissue: ${note.necroticTissue?.trim() || "n/a"}`,
+    `Procedure: ${note.procedure?.trim() || "n/a"}`,
+    `Tissue removed: ${note.tissueRemoved?.trim() || "n/a"}`,
+    `Post-procedure status: ${note.postProcedureStatus?.trim() || "n/a"}`,
+    `Follow-up plan: ${note.followUpPlan?.trim() || "n/a"}`,
+  ].join("\n");
+}
+
+export function suggestDebridementCptCode(input: DebridementNoteInput): string {
+  const depth = (input.depthRemoved ?? "").toLowerCase();
+
+  if (depth.includes("bone")) {
+    return "11044";
+  }
+  if (depth.includes("muscle")) {
+    return "11043";
+  }
+  if (depth.includes("subcutaneous")) {
+    return "11042";
+  }
+
+  return "97597";
+}
+
+export function scoreDebridementDocumentation(input: DebridementNoteInput): DebridementAuditScoreResult {
+  let score = 0;
+  const missingElements: string[] = [];
+
+  if (isPositiveNumber(input.lengthCm) && isPositiveNumber(input.widthCm) && isPositiveNumber(input.depthCm)) {
+    score += 20;
+  } else {
+    missingElements.push("wound dimensions");
+  }
+
+  if (hasText(input.tissuePresent)) {
+    score += 20;
+  } else {
+    missingElements.push("tissue present");
+  }
+
+  if (hasText(input.tissueRemoved)) {
+    score += 20;
+  } else {
+    missingElements.push("tissue removed");
+  }
+
+  if (isPositiveNumber(input.surfaceAreaSqCm)) {
+    score += 20;
+  } else {
+    missingElements.push("surface area");
+  }
+
+  if (hasText(input.postProcedureStatus)) {
+    score += 20;
+  } else {
+    missingElements.push("post-procedure status");
+  }
+
+  const risk: "LOW" | "MEDIUM" | "HIGH" =
+    score >= 90 ? "LOW" : score >= 70 ? "MEDIUM" : "HIGH";
+
+  return {
+    score,
+    risk,
+    missingElements,
+  };
+}
+
+export function generateDebridementNote(input: DebridementNoteInput): string {
+  const length = isPositiveNumber(input.lengthCm) ? input.lengthCm.toFixed(1) : "n/a";
+  const width = isPositiveNumber(input.widthCm) ? input.widthCm.toFixed(1) : "n/a";
+  const depth = isPositiveNumber(input.depthCm) ? input.depthCm.toFixed(1) : "n/a";
+  const area = isPositiveNumber(input.surfaceAreaSqCm) ? input.surfaceAreaSqCm.toFixed(1) : "n/a";
+  const cpt = suggestDebridementCptCode(input);
+
+  return [
+    `Diagnosis: ${input.diagnosis?.trim() || "n/a"}`,
+    `Wound Location: ${input.woundLocation?.trim() || "n/a"}`,
+    `Pre-Procedure Measurements (cm): ${length} x ${width} x ${depth}`,
+    `Tissue Present: ${input.tissuePresent?.trim() || "n/a"}`,
+    `Procedure Method: ${input.procedureMethod?.trim() || "n/a"}`,
+    `Tissue Removed: ${input.tissueRemoved?.trim() || "n/a"}`,
+    `Depth Removed: ${input.depthRemoved?.trim() || "n/a"}`,
+    `Surface Area Treated (sq cm): ${area}`,
+    `Hemostasis: ${input.hemostasis?.trim() || "n/a"}`,
+    `Post-Procedure Status: ${input.postProcedureStatus?.trim() || "n/a"}`,
+    `Follow-Up Plan: ${input.followUpPlan?.trim() || "n/a"}`,
+    `Suggested CPT: ${cpt}`,
+  ].join("\n");
+}
+
+export function calculateWoundAreaReduction(
+  initialAreaSqCm: number,
+  currentAreaSqCm: number,
+): number {
+  if (!Number.isFinite(initialAreaSqCm) || !Number.isFinite(currentAreaSqCm) || initialAreaSqCm <= 0) {
+    return 0;
+  }
+
+  const reduction = ((initialAreaSqCm - currentAreaSqCm) / initialAreaSqCm) * 100;
+  const clamped = Math.max(-100, Math.min(100, reduction));
+  return Math.round(clamped * 10) / 10;
+}
+
+export function evaluateEscalation(input: EscalationEvaluationInput): EscalationEvaluationResult {
+  const weeks = Number.isFinite(input.weeksOfTreatment as number) ? Number(input.weeksOfTreatment) : 0;
+  const reduction = Number.isFinite(input.percentAreaReduction as number)
+    ? Number(input.percentAreaReduction)
+    : 0;
+  const infectionPresent = Boolean(input.infectionPresent);
+  const necroticTissuePresent = Boolean(input.necroticTissuePresent);
+  const standardCareCompleted = input.standardCareCompleted !== false;
+  const rationale: string[] = [];
+
+  if (!standardCareCompleted) {
+    rationale.push("Escalation is not appropriate until standard care has been completed and documented.");
+    return {
+      recommendationCode: "STANDARD_CARE_NOT_COMPLETE",
+      recommendation: "Complete standard care and document objective trends before escalation.",
+      graftRecommendation: "Not eligible for CTP consideration until standard care is completed.",
+      rationale,
+    };
+  }
+
+  if (weeks < 4) {
+    rationale.push("Treatment duration is under 4 weeks.");
+    return {
+      recommendationCode: "CONTINUE_STANDARD_CARE",
+      recommendation: "Continue standard care and trend objective measurements weekly.",
+      graftRecommendation: "Not yet eligible for CTP consideration.",
+      rationale,
+    };
+  }
+
+  if (reduction >= 30) {
+    rationale.push("Wound area reduction meets or exceeds 30% at week 4 or later.");
+    return {
+      recommendationCode: "CONTINUE_STANDARD_CARE",
+      recommendation: "Continue standard care; objective trend supports current plan.",
+      graftRecommendation:
+        reduction < 50
+          ? "CTP may be considered if healing stalls after continued advanced therapy."
+          : "CTP not indicated while objective healing is progressing.",
+      rationale,
+    };
+  }
+
+  if (infectionPresent) {
+    rationale.push("Infection is present and should be addressed before escalation.");
+    return {
+      recommendationCode: "TREAT_INFECTION",
+      recommendation: "Treat infection and reassess objective healing trend before escalation.",
+      graftRecommendation: "Not eligible for CTP until infection is controlled.",
+      rationale,
+    };
+  }
+
+  if (necroticTissuePresent) {
+    rationale.push("Necrotic tissue remains and requires additional debridement.");
+    return {
+      recommendationCode: "DEBRIDEMENT_NEEDED",
+      recommendation: "Perform additional debridement and reassess healing trend.",
+      graftRecommendation: "Not eligible for CTP until necrotic burden is addressed.",
+      rationale,
+    };
+  }
+
+  rationale.push("Healing trend is below benchmark despite standard care.");
+  return {
+    recommendationCode: "ESCALATE_ADVANCED_MODALITY",
+    recommendation: "Escalate to advanced modality based on objective healing plateau.",
+    graftRecommendation:
+      reduction < 50
+        ? "Eligible for CTP consideration with documented standard care failure and trends."
+        : "Continue advanced therapy and trend progress before CTP consideration.",
+    rationale,
+  };
+}
+
 export function splitList(input: string | null | undefined): string[] {
   if (!input) {
     return [];
@@ -271,6 +580,14 @@ export function maskLearnerName(fullName: string): string {
 
 function normalizeToken(input: string): string {
   return input.trim().replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "GENERAL";
+}
+
+function hasText(value: string | undefined): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isPositiveNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function randomToken(length: number): string {

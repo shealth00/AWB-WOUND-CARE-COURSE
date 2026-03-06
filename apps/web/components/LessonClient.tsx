@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { apiUrl } from "../src/api";
+import { fetchJson } from "../src/http";
 
 interface LessonResponse {
   lesson_id: string;
@@ -58,14 +58,7 @@ export function LessonClient() {
       return;
     }
 
-    void fetch(apiUrl(`/lessons/${params.lessonId}`))
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("Lesson not found.");
-        }
-
-        return (await response.json()) as LessonResponse;
-      })
+    void fetchJson<LessonResponse>(`/lessons/${params.lessonId}`)
       .then(setLesson)
       .catch((reason: unknown) =>
         setError(reason instanceof Error ? reason.message : "Failed to load lesson."),
@@ -88,7 +81,7 @@ export function LessonClient() {
     const trackId = resolveTrackId(lesson.track);
 
     try {
-      const response = await fetch(apiUrl("/progress/lessons"), {
+      const payload = await fetchJson<{ completed?: boolean }>("/progress/lessons", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -101,11 +94,6 @@ export function LessonClient() {
           totalSeconds: (lesson.duration_min ?? 10) * 60,
         }),
       });
-      const payload = (await response.json()) as { completed?: boolean };
-
-      if (!response.ok) {
-        throw new Error("Progress update failed.");
-      }
 
       setProgress(payload.completed ? "Lesson marked complete." : "Lesson progress saved below threshold.");
     } catch (reason) {

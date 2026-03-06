@@ -5,20 +5,7 @@ import {
 } from "@awb/lms-core/program";
 import { query } from "./db.js";
 
-const DEMO_VIDEO_URLS = [
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4",
-  "https://storage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-];
+const DEMO_VIDEO_URLS = Array.from({ length: 12 }, (_, index) => `/videos/V${String(index + 1).padStart(2, "0")}.mp4`);
 
 const DOWNLOAD_URLS: Record<string, string> = {
   "wound visit documentation template": "/downloads/awb-assessment-sample-note.pdf",
@@ -52,13 +39,14 @@ export async function ensureDemoCatalogAndQuestions(): Promise<DemoSeedSummary> 
       await query(
         `
           insert into content_lessons (
-            lesson_id, track, module_id, module_title, lesson_title, video_url, duration_min,
+            lesson_id, source_row_id, track, module_id, module_title, lesson_title, video_url, duration_min,
             objectives, downloads, publish_status, version, owner
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, 'Published', '1.0', 'AWB Academy')
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, 'Published', '1.0', 'AWB Academy')
         `,
         [
           row.lessonId,
+          null,
           row.track,
           row.moduleId,
           row.moduleTitle,
@@ -151,7 +139,7 @@ function buildDemoLessonRows() {
         lessonTitle: lesson.title,
         videoUrl: DEMO_VIDEO_URLS[videoIndex % DEMO_VIDEO_URLS.length]!,
         durationMin: lesson.durationMin,
-        objectives: module.outcomes.slice(0, 3),
+        objectives: lesson.objectives.length > 0 ? lesson.objectives.slice(0, 3) : module.outcomes.slice(0, 3),
         downloads: normalizeDownloads(module.downloads),
       });
       videoIndex += 1;
@@ -171,7 +159,7 @@ function buildDemoLessonRows() {
           lessonTitle: lesson.title,
           videoUrl: DEMO_VIDEO_URLS[videoIndex % DEMO_VIDEO_URLS.length]!,
           durationMin: lesson.durationMin,
-          objectives: mergeObjectives(module),
+          objectives: lesson.objectives.length > 0 ? lesson.objectives.slice(0, 3) : mergeObjectives(module),
           downloads: normalizeDownloads(module.downloads),
         });
         videoIndex += 1;
@@ -193,7 +181,7 @@ function buildDemoQuestionRows() {
     ),
   ];
 
-  return modules.flatMap(({ module, track }) => {
+  const moduleQuestions = modules.flatMap(({ module, track }) => {
     const key = slug(`${track}-${module.id}`);
 
     return [
@@ -253,6 +241,70 @@ function buildDemoQuestionRows() {
       },
     ];
   });
+
+  const finalExamQuestions = PROGRAM_TRACKS.flatMap((trackMeta) => {
+    const key = slug(`${trackMeta.title}-FINAL`);
+    const track = trackMeta.title;
+
+    return [
+      {
+        sourceRowId: `seed-${key}-1`,
+        track,
+        moduleId: "FINAL",
+        difficulty: 3,
+        questionType: "MCQ",
+        stem: `${trackMeta.title}: Which final-exam evidence pattern most strongly supports escalation to advanced modalities?`,
+        options: [
+          { key: "A", value: "Single narrative note with no baseline metrics" },
+          { key: "B", value: "Serial objective measurements plus failed conservative-care timeline" },
+          { key: "C", value: "Product preference list only" },
+          { key: "D", value: "Billing code list without wound progression context" },
+        ],
+        correctAnswer: "B",
+        rationale:
+          "Final-exam readiness requires objective trend evidence and documented conservative-care failure before escalation.",
+        tags: ["final", "medical-necessity", slug(track)],
+      },
+      {
+        sourceRowId: `seed-${key}-2`,
+        track,
+        moduleId: "FINAL",
+        difficulty: 3,
+        questionType: "Multi",
+        stem: `${trackMeta.title}: Select all final-exam elements expected in an audit-defensible note set.`,
+        options: [
+          { key: "A", value: "Serial measurements and trend interpretation" },
+          { key: "B", value: "Etiology-specific standard-of-care documentation" },
+          { key: "C", value: "Escalation rationale and follow-up plan" },
+          { key: "D", value: "General statement that wound is better" },
+        ],
+        correctAnswer: "A,B,C",
+        rationale:
+          "Defensible final-exam patterns require objective measures, standard-care detail, and escalation rationale.",
+        tags: ["final", "audit-readiness", slug(track)],
+      },
+      {
+        sourceRowId: `seed-${key}-3`,
+        track,
+        moduleId: "FINAL",
+        difficulty: 2,
+        questionType: "Case",
+        stem: `${trackMeta.title}: A record shows complete lessons but inconsistent trend data. What should happen before certification?`,
+        options: [
+          { key: "A", value: "Issue certificate immediately if attendance is complete" },
+          { key: "B", value: "Require final exam pass and complete trend documentation checks" },
+          { key: "C", value: "Skip final exam because module quizzes were attempted" },
+          { key: "D", value: "Approve based only on verbal handoff" },
+        ],
+        correctAnswer: "B",
+        rationale:
+          "Certification requires final exam pass and defensible documentation standards, not attendance alone.",
+        tags: ["final", "certificate", slug(track)],
+      },
+    ];
+  });
+
+  return [...moduleQuestions, ...finalExamQuestions];
 }
 
 function normalizeDownloads(downloads: string[] | undefined): string[] {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { apiUrl } from "../src/api";
+import { fetchJson } from "../src/http";
 
 interface VerifyResponse {
   valid: boolean;
@@ -39,16 +39,7 @@ export function VerifyCertificateClient() {
       return;
     }
 
-    void fetch(apiUrl(`/verify/${params.certificateId}`))
-      .then(async (response) => {
-        const payload = (await response.json()) as VerifyResponse;
-
-        if (!response.ok) {
-          throw new Error(payload.reason ?? "Certificate verification failed.");
-        }
-
-        return payload;
-      })
+    void fetchJson<VerifyResponse>(`/verify/${params.certificateId}`)
       .then(setData)
       .catch((reason: unknown) =>
         setError(reason instanceof Error ? reason.message : "Certificate verification failed."),

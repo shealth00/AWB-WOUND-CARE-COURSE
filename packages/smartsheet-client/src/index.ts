@@ -37,6 +37,12 @@ export interface SmartsheetRowInput {
   locked?: boolean;
 }
 
+export interface SmartsheetRowUpdateInput {
+  id: SmartsheetId;
+  cells: SmartsheetCellInput[];
+  locked?: boolean;
+}
+
 export interface SmartsheetSheetColumn {
   id: SmartsheetId;
   title: string;
@@ -208,6 +214,32 @@ export class SmartsheetClient {
 
     const response = await this.request<SmartsheetSuccessEnvelope<SmartsheetSheetRow[]>>(
       "POST",
+      `/sheets/${sheetId}/rows`,
+      {
+        body: JSON.stringify(rows),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    return response.result;
+  }
+
+  async updateRows(
+    sheetId: SmartsheetId,
+    rows: SmartsheetRowUpdateInput[],
+  ): Promise<SmartsheetSheetRow[]> {
+    if (rows.length === 0) {
+      throw new Error("updateRows requires at least one row");
+    }
+
+    if (rows.length > 500) {
+      throw new Error("Smartsheet updateRows supports a maximum of 500 rows per request");
+    }
+
+    const response = await this.request<SmartsheetSuccessEnvelope<SmartsheetSheetRow[]>>(
+      "PUT",
       `/sheets/${sheetId}/rows`,
       {
         body: JSON.stringify(rows),

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { apiUrl } from "../src/api";
+import { fetchJson } from "../src/http";
 
 interface QuizQuestion {
   id: string;
@@ -15,6 +15,7 @@ interface QuizQuestion {
 interface QuizResponse {
   track: string;
   moduleId: string;
+  isFinalExam?: boolean;
   passingScore: number;
   questions: QuizQuestion[];
 }
@@ -41,6 +42,13 @@ export function QuizClient() {
 
   const track = searchParams.get("track") ?? "";
   const moduleId = searchParams.get("moduleId") ?? "";
+  const userIdParam = searchParams.get("userId");
+
+  useEffect(() => {
+    if (userIdParam && userIdParam.trim().length > 0) {
+      setUserId(userIdParam);
+    }
+  }, [userIdParam]);
 
   useEffect(() => {
     if (!track || !moduleId) {
@@ -48,17 +56,9 @@ export function QuizClient() {
     }
 
     setError(null);
-    void fetch(
-      apiUrl(`/quiz?track=${encodeURIComponent(track)}&moduleId=${encodeURIComponent(moduleId)}&n=10`),
+    void fetchJson<QuizResponse>(
+      `/quiz?track=${encodeURIComponent(track)}&moduleId=${encodeURIComponent(moduleId)}&userId=${encodeURIComponent(userId)}&n=10`,
     )
-      .then(async (response) => {
-        if (!response.ok) {
-          const payload = (await response.json()) as { error?: string };
-          throw new Error(payload.error ?? "Failed to load quiz.");
-        }
-
-        return (await response.json()) as QuizResponse;
-      })
       .then((payload) => {
         setQuiz(payload);
         setAnswers({});
@@ -67,7 +67,7 @@ export function QuizClient() {
       .catch((reason: unknown) =>
         setError(reason instanceof Error ? reason.message : "Failed to load quiz."),
       );
-  }, [moduleId, track]);
+  }, [moduleId, track, userId]);
 
   const isReady = useMemo(() => quiz && track && moduleId, [moduleId, quiz, track]);
 
@@ -80,7 +80,7 @@ export function QuizClient() {
     setError(null);
 
     try {
-      const response = await fetch(apiUrl("/quiz/submit"), {
+      const payload = await fetchJson<QuizSubmitResponse>("/quiz/submit", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -89,7 +89,7 @@ export function QuizClient() {
           userId,
           track,
           moduleId,
-          isFinalExam: true,
+          isFinalExam: moduleId.toUpperCase() === "FINAL",
           timeSpentSec: quiz.questions.length * 45,
           answers: quiz.questions.map((question) => ({
             questionId: question.id,
@@ -97,14 +97,7 @@ export function QuizClient() {
           })),
         }),
       });
-
-      const payload = (await response.json()) as QuizSubmitResponse | { error?: string };
-
-      if (!response.ok) {
-        throw new Error("error" in payload ? (payload.error ?? "Quiz submission failed.") : "Quiz submission failed.");
-      }
-
-      setResult(payload as QuizSubmitResponse);
+      setResult(payload);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Quiz submission failed.");
     } finally {
@@ -154,7 +147,7 @@ export function QuizClient() {
     <div className="grid">
       <section className="hero">
         <div className="pill">{track}</div>
-        <h1>Module quiz</h1>
+        <h1>{moduleId.toUpperCase() === "FINAL" ? "Final exam" : "Module quiz"}</h1>
         <p className="muted">
           Module <span className="mono">{moduleId}</span> with {quiz.questions.length} questions. Passing score:
           {" "}{quiz.passingScore}%.

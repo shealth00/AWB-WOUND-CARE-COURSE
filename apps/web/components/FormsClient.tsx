@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiUrl } from "../src/api";
+import { fetchJson } from "../src/http";
 
 interface SubmitResponse {
   submissionId: string;
+  caseId: string;
   status: string;
   smartsheetSynced: boolean;
 }
@@ -40,8 +41,7 @@ export function FormsClient() {
   const [program, setProgram] = useState<ProgramCatalogResponse | null>(null);
 
   useEffect(() => {
-    void fetch(apiUrl("/program/catalog"))
-      .then((response) => response.json() as Promise<ProgramCatalogResponse>)
+    void fetchJson<ProgramCatalogResponse>("/program/catalog")
       .then(setProgram)
       .catch(() => undefined);
   }, []);
@@ -55,17 +55,12 @@ export function FormsClient() {
     const form = new FormData(event.currentTarget);
 
     try {
-      const response = await fetch(apiUrl("/forms/submit"), {
+      const payload = await fetchJson<SubmitResponse>("/forms/submit", {
         method: "POST",
         body: form,
       });
-      const payload = (await response.json()) as SubmitResponse | { error?: string };
 
-      if (!response.ok) {
-        throw new Error("error" in payload ? payload.error ?? "Form submission failed." : "Form submission failed.");
-      }
-
-      setResult(payload as SubmitResponse);
+      setResult(payload);
       event.currentTarget.reset();
       setFacilityName("");
       setCaseId("");
@@ -83,12 +78,26 @@ export function FormsClient() {
         <div className="pill">No PHI</div>
         <h1>Operational forms</h1>
         <p className="muted">
-          Facility Escalation Packet and Post-op Protocol submissions write to Smartsheet and keep
-          uploaded files attached to the row.
+          Facility escalation, post-op graft protocol, training requests, and intake submissions
+          write to Smartsheet and keep uploaded files attached to the row.
         </p>
         <div className="actions">
           <a className="button secondary" href="/downloads/awb-wound-documentation-pack.pdf">
             Download AWB Documentation Pack
+          </a>
+          <a className="button secondary" href="/downloads/awb-risk-scales.pdf">
+            Download AWB Risk Scales
+          </a>
+          <a className="button secondary" href="/downloads/awb-place-of-service-selector.pdf">
+            Download POS Selector
+          </a>
+          <a
+            className="button secondary"
+            href="/downloads/awb-place-of-service-tracking-tool.html"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Open POS Tracking Tool
           </a>
         </div>
       </section>
@@ -127,10 +136,9 @@ export function FormsClient() {
             Submission type
             <select name="submissionType" onChange={(event) => setSubmissionType(event.target.value)} value={submissionType}>
               <option>Facility Escalation Packet</option>
-              <option>Post-op Protocol</option>
-              <option>Weekly Wound Rounds Checklist</option>
-              <option>Pressure Injury Prevention Bundle</option>
-              <option>Post-Op Graft Care Protocol</option>
+              <option>Post-Op Graft Protocol Submission</option>
+              <option>Training Request / Onboarding</option>
+              <option>General Intake / IVR Intake</option>
             </select>
           </label>
           <label className="field">
@@ -151,7 +159,12 @@ export function FormsClient() {
           </label>
           <label className="field">
             Case ID
-            <input name="caseId" onChange={(event) => setCaseId(event.target.value)} value={caseId} />
+            <input
+              name="caseId"
+              onChange={(event) => setCaseId(event.target.value)}
+              placeholder="Optional: leave blank to auto-generate"
+              value={caseId}
+            />
           </label>
         </div>
         <label className="field">
@@ -171,7 +184,7 @@ export function FormsClient() {
 
       {result ? (
         <div className="card status-good">
-          Submitted {result.submissionId} with status {result.status}.
+          Submitted {result.submissionId} with Case ID {result.caseId} and status {result.status}.
           {!result.smartsheetSynced ? " Local save succeeded but Smartsheet sync failed." : ""}
         </div>
       ) : null}

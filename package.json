@@ -14,7 +14,7 @@
     "test:api": "npm run test --workspace @awb/api",
     "test:e2e": "playwright test",
     "test": "npm run test:unit && npm run test:api",
-    "build": "npm run build:shared && npm run build --workspace @awb/api && NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000} NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV:-development} npm run build --workspace @awb/web",
+    "build": "npm run build:shared && npm run build --workspace @awb/api && npm run build --workspace @awb/web",
     "lint": "npm run lint --workspace @awb/lms-core && npm run lint --workspace @awb/smartsheet-client && npm run lint --workspace @awb/api && npm run lint --workspace @awb/web"
   },
   "devDependencies": {

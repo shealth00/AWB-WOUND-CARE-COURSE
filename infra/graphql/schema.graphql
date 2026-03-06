@@ -1,0 +1,172 @@
+scalar DateTime
+scalar JSON
+
+type User {
+  id: ID!
+  email: String!
+  firstName: String
+  lastName: String
+  roles: [String!]!
+}
+
+type Plan {
+  id: ID!
+  code: String!
+  name: String!
+}
+
+type Membership {
+  id: ID!
+  status: String!
+  startsAt: DateTime
+  endsAt: DateTime
+  plan: Plan!
+}
+
+type Course {
+  id: ID!
+  slug: String!
+  title: String!
+  subtitle: String
+  description: String
+  status: String!
+  estimatedMinutes: Int
+  sections: [CourseSection!]!
+}
+
+type CourseSection {
+  id: ID!
+  title: String!
+  sortOrder: Int!
+  lessons: [Lesson!]!
+}
+
+type Lesson {
+  id: ID!
+  slug: String!
+  title: String!
+  lessonType: String!
+  bodyJson: JSON
+  assets: [Asset!]!
+}
+
+type Asset {
+  id: ID!
+  assetType: String!
+  title: String
+  description: String
+  mimeType: String
+  durationSeconds: Int
+  processingStatus: String!
+}
+
+type Quiz {
+  id: ID!
+  slug: String!
+  title: String!
+  passingScore: Float!
+  questions: [QuizQuestion!]!
+}
+
+type QuizQuestion {
+  id: ID!
+  questionType: String!
+  stem: String!
+  options: [QuizOption!]
+  points: Float!
+}
+
+type QuizOption {
+  id: ID!
+  label: String!
+  value: String!
+}
+
+type QuizAttempt {
+  id: ID!
+  score: Float
+  passed: Boolean
+  status: String!
+  submittedAt: DateTime
+}
+
+type Certificate {
+  id: ID!
+  certificateNumber: String!
+  verificationToken: String!
+  issuedAt: DateTime!
+  expiresAt: DateTime
+  status: String!
+  pdfUrl: String
+}
+
+type SignedAssetResponse {
+  url: String
+  cookieName: String
+  cookieValue: String
+  expiresAt: DateTime!
+  deliveryMode: String!
+}
+
+input UploadAssetInitInput {
+  filename: String!
+  mimeType: String!
+  bytes: Int!
+  assetType: String!
+  courseId: ID
+}
+
+type UploadPart {
+  partNumber: Int!
+  url: String!
+}
+
+type UploadSession {
+  uploadId: String!
+  assetId: ID!
+  key: String!
+  parts: [UploadPart!]!
+}
+
+input CompletedUploadPartInput {
+  partNumber: Int!
+  eTag: String!
+}
+
+input UploadAssetFinalizeInput {
+  assetId: ID!
+  uploadId: String!
+  parts: [CompletedUploadPartInput!]!
+}
+
+input SubmitQuizAttemptInput {
+  quizId: ID!
+  answers: JSON!
+}
+
+input SubmitFormInput {
+  formId: ID!
+  payload: JSON!
+}
+
+type Query {
+  me: User!
+  myDashboard: JSON!
+  listCourses: [Course!]!
+  getCourse(slug: String!): Course
+  getLesson(courseSlug: String!, lessonSlug: String!): Lesson
+  listVideoLibrary(tags: [String!], search: String): [Asset!]!
+  listDocuments(tags: [String!], search: String): [Asset!]!
+  getQuiz(slug: String!): Quiz
+  myCertificates: [Certificate!]!
+  getAssetAccess(assetId: ID!, purpose: String!): SignedAssetResponse!
+  verifyCertificate(token: String!): Certificate
+}
+
+type Mutation {
+  uploadAssetInit(input: UploadAssetInitInput!): UploadSession!
+  uploadAssetFinalize(input: UploadAssetFinalizeInput!): Asset!
+  submitQuizAttempt(input: SubmitQuizAttemptInput!): QuizAttempt!
+  submitForm(input: SubmitFormInput!): Boolean!
+  issueCertificate(trackId: ID!, userId: ID!): Certificate!
+}

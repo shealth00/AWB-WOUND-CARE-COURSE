@@ -1,4 +1,6 @@
 import dotenv from "dotenv";
+import os from "node:os";
+import path from "node:path";
 import { z } from "zod";
 
 dotenv.config();
@@ -6,20 +8,23 @@ dotenv.config();
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   APP_ENV: z.string().default("development"),
+  APP_VERSION: z.string().default("0.1.0"),
   BASE_URL: z.string().url().default("https://www.advancewoundbiologic.com"),
   ADMIN_API_KEY: z.string().min(8).default("development-admin-key"),
   ADMIN_LOGIN_EMAIL: z.string().email().default("admin@advancewoundbiologic.com"),
   ADMIN_LOGIN_PASSWORD: z.string().min(8).default("change-me-now"),
   ADMIN_SESSION_TTL_SEC: z.coerce.number().int().positive().default(43200),
+  MEMBER_AUTH_SECRET: z.string().min(8).default("development-member-secret"),
+  MEMBER_SESSION_TTL_SEC: z.coerce.number().int().positive().default(604800),
   NIGHTLY_SYNC_CRON: z.string().default("0 2 * * *"),
-  SMARTSHEET_ACCESS_TOKEN: z.string().min(1),
+  SMARTSHEET_ACCESS_TOKEN: z.string().default(""),
   SMARTSHEET_INTEGRATION_SOURCE: z.string().default("APPLICATION,AWB,Academy"),
   DATABASE_URL: z.string().min(1),
-  SMARTSHEET_SHEETID_CATALOG: z.string().min(1),
-  SMARTSHEET_SHEETID_QUESTIONBANK: z.string().min(1),
-  SMARTSHEET_SHEETID_RESULTS: z.string().min(1),
-  SMARTSHEET_SHEETID_FORMS: z.string().min(1),
-  SMARTSHEET_SHEETID_IVR: z.string().min(1),
+  SMARTSHEET_SHEETID_CATALOG: z.string().default(""),
+  SMARTSHEET_SHEETID_QUESTIONBANK: z.string().default(""),
+  SMARTSHEET_SHEETID_RESULTS: z.string().default(""),
+  SMARTSHEET_SHEETID_FORMS: z.string().default(""),
+  SMARTSHEET_SHEETID_IVR: z.string().default(""),
   SMARTSHEET_WEBHOOK_CALLBACK_URL: z.string().url().optional(),
   SMARTSHEET_WEBHOOK_SCOPE: z.enum(["sheet", "workspace", "plan"]).default("sheet"),
   SMARTSHEET_WEBHOOK_SCOPE_OBJECT_ID: z.string().min(1).optional(),
@@ -36,6 +41,9 @@ const envSchema = z.object({
   CERTIFICATE_PDF_S3_BUCKET: z.string().optional(),
   VERIFY_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   VERIFY_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
+  MEDIA_STORAGE_DIR: z.string().default(path.join(os.homedir(), ".awb-academy", "media")),
+  VIDEO_GENERATION_DEFAULT_VOICE: z.string().default("Joanna"),
+  VIDEO_GENERATION_MAX_SCRIPT_CHARS: z.coerce.number().int().positive().max(500000).default(120000),
 });
 
 export const apiEnv = envSchema.parse(process.env);
