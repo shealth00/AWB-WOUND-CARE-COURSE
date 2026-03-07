@@ -17,6 +17,7 @@ export interface SmartsheetSheetCheck {
 }
 
 export interface SmartsheetHealthReport {
+  required: boolean;
   configured: boolean;
   ok: boolean;
   missingKeys: string[];
@@ -35,29 +36,44 @@ export const smartsheetIds = {
   ivr: apiEnv.SMARTSHEET_SHEETID_IVR,
 };
 
+function isUnsetOrPlaceholder(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (normalized.includes("placeholder")) {
+    return true;
+  }
+  return normalized === "replace-me";
+}
+
 export function getMissingSmartsheetConfigKeys(): string[] {
   const missing: string[] = [];
 
-  if (!apiEnv.SMARTSHEET_ACCESS_TOKEN.trim()) {
+  if (isUnsetOrPlaceholder(apiEnv.SMARTSHEET_ACCESS_TOKEN)) {
     missing.push("SMARTSHEET_ACCESS_TOKEN");
   }
-  if (!smartsheetIds.catalog.trim()) {
+  if (isUnsetOrPlaceholder(smartsheetIds.catalog)) {
     missing.push("SMARTSHEET_SHEETID_CATALOG");
   }
-  if (!smartsheetIds.questionBank.trim()) {
+  if (isUnsetOrPlaceholder(smartsheetIds.questionBank)) {
     missing.push("SMARTSHEET_SHEETID_QUESTIONBANK");
   }
-  if (!smartsheetIds.results.trim()) {
+  if (isUnsetOrPlaceholder(smartsheetIds.results)) {
     missing.push("SMARTSHEET_SHEETID_RESULTS");
   }
-  if (!smartsheetIds.forms.trim()) {
+  if (isUnsetOrPlaceholder(smartsheetIds.forms)) {
     missing.push("SMARTSHEET_SHEETID_FORMS");
   }
-  if (!smartsheetIds.ivr.trim()) {
+  if (isUnsetOrPlaceholder(smartsheetIds.ivr)) {
     missing.push("SMARTSHEET_SHEETID_IVR");
   }
 
   return missing;
+}
+
+export function isSmartsheetRequired(): boolean {
+  return apiEnv.SMARTSHEET_REQUIRED;
 }
 
 export function isSmartsheetConfigured(): boolean {
@@ -65,12 +81,24 @@ export function isSmartsheetConfigured(): boolean {
 }
 
 export async function getSmartsheetHealthReport(): Promise<SmartsheetHealthReport> {
+  const required = isSmartsheetRequired();
   const missingKeys = getMissingSmartsheetConfigKeys();
   const configured = missingKeys.length === 0;
   const sheetChecks = createEmptySheetChecks();
 
+  if (!required) {
+    return {
+      required,
+      configured,
+      ok: true,
+      missingKeys,
+      sheetChecks,
+    };
+  }
+
   if (!configured) {
     return {
+      required,
       configured: false,
       ok: false,
       missingKeys,
@@ -110,6 +138,7 @@ export async function getSmartsheetHealthReport(): Promise<SmartsheetHealthRepor
   }
 
   return {
+    required,
     configured: true,
     ok: Object.values(sheetChecks).every((check) => check.ok),
     missingKeys,

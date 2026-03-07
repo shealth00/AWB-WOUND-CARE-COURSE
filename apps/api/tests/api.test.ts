@@ -91,6 +91,7 @@ beforeEach(() => {
     rows: [],
   });
   smartsheetMock.getSmartsheetHealthReport.mockResolvedValue({
+    required: true,
     configured: true,
     ok: true,
     missingKeys: [],

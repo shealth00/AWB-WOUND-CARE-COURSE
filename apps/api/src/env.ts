@@ -5,6 +5,20 @@ import { z } from "zod";
 
 dotenv.config();
 
+const booleanFromEnv = z.preprocess((value) => {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["0", "false", "no", "off"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  return value;
+}, z.boolean());
+
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   APP_ENV: z.string().default("development"),
@@ -17,6 +31,7 @@ const envSchema = z.object({
   MEMBER_AUTH_SECRET: z.string().min(8).default("development-member-secret"),
   MEMBER_SESSION_TTL_SEC: z.coerce.number().int().positive().default(604800),
   NIGHTLY_SYNC_CRON: z.string().default("0 2 * * *"),
+  SMARTSHEET_REQUIRED: booleanFromEnv.default(true),
   SMARTSHEET_ACCESS_TOKEN: z.string().default(""),
   SMARTSHEET_INTEGRATION_SOURCE: z.string().default("APPLICATION,AWB,Academy"),
   DATABASE_URL: z.string().min(1),
@@ -43,7 +58,10 @@ const envSchema = z.object({
   VERIFY_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
   MEDIA_STORAGE_DIR: z.string().default(path.join(os.homedir(), ".awb-academy", "media")),
   VIDEO_GENERATION_DEFAULT_VOICE: z.string().default("Joanna"),
+  VIDEO_GENERATION_DEFAULT_PROVIDER: z.enum(["aws-polly", "openai-tts"]).default("aws-polly"),
+  VIDEO_GENERATION_OPENAI_MODEL: z.string().default("gpt-4o-mini-tts"),
   VIDEO_GENERATION_MAX_SCRIPT_CHARS: z.coerce.number().int().positive().max(500000).default(120000),
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 export const apiEnv = envSchema.parse(process.env);

@@ -26,6 +26,23 @@ const MIME_EXTENSION_MAP: Record<string, string> = {
   "application/pdf": "pdf",
 };
 
+const EXTENSION_MIME_MAP: Record<string, string> = {
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  avi: "video/x-msvideo",
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  pdf: "application/pdf",
+};
+
+export function inferMimeTypeFromFileName(fileName: string): string | null {
+  const extension = path.extname(fileName).replace(".", "").toLowerCase();
+  return EXTENSION_MIME_MAP[extension] ?? null;
+}
+
 const TEMP_UPLOAD_DIR = path.join(os.tmpdir(), "awb-academy-media-upload");
 
 export function getMediaRootDir(): string {
@@ -73,7 +90,10 @@ export function detectMedia(fileName: string, mimeType: string): MediaDetection 
   if (["mp4", "webm", "mov", "avi"].includes(extensionFromName)) {
     return {
       mediaType: "video",
-      mimeType: normalizedMimeType || "application/octet-stream",
+      mimeType:
+        normalizedMimeType.startsWith("video/")
+          ? normalizedMimeType
+          : (EXTENSION_MIME_MAP[extensionFromName] ?? "video/mp4"),
       extension: extensionFromName,
     };
   }
@@ -81,7 +101,10 @@ export function detectMedia(fileName: string, mimeType: string): MediaDetection 
   if (["mp3", "m4a", "wav", "ogg"].includes(extensionFromName)) {
     return {
       mediaType: "audio",
-      mimeType: normalizedMimeType || "application/octet-stream",
+      mimeType:
+        normalizedMimeType.startsWith("audio/")
+          ? normalizedMimeType
+          : (EXTENSION_MIME_MAP[extensionFromName] ?? "audio/mpeg"),
       extension: extensionFromName,
     };
   }

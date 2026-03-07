@@ -5,6 +5,7 @@ import { PollyClient, SynthesizeSpeechCommand, type VoiceId } from "@aws-sdk/cli
 import { apiEnv } from "../env.js";
 
 type PollyEngine = "standard" | "neural" | "long-form" | "generative";
+type TtsProvider = "aws-polly" | "openai-tts";
 type GenerationStage = "processing" | "rendering";
 type SlideLayout = "title" | "bullets" | "callout" | "outro";
 
@@ -25,8 +26,10 @@ export interface LessonVideoGenerationInput {
   owner: string;
   script?: string | null;
   slides?: StructuredSlideInput[] | null;
+  ttsProvider?: TtsProvider;
   voiceId?: string;
   voiceEngine?: PollyEngine;
+  openAiModel?: string;
   render?: {
     width?: number;
     height?: number;
@@ -67,6 +70,7 @@ const generatedPublicRoot = path.join(webAppDir, "public", "generated");
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 const DEFAULT_FPS = 30;
+const REMOTION_CLI_PACKAGE = "@remotion/cli@4.0.366";
 
 const DEFAULT_BRAND = {
   logoUrl: null as string | null,
@@ -114,13 +118,15 @@ export async function generateLessonVideo(
 
   const narrationText = slides.map((slide) => slide.narration).join("\n\n").trim();
   if (!narrationText) {
-    throw new Error("No narration text found for Polly synthesis.");
+    throw new Error("No narration text found for speech synthesis.");
   }
 
-  await synthesizeNarrationWithPolly({
+  await synthesizeNarration({
+    provider: input.ttsProvider ?? "aws-polly",
     text: narrationText,
     voiceId: input.voiceId ?? apiEnv.VIDEO_GENERATION_DEFAULT_VOICE,
     engine: input.voiceEngine ?? "neural",
+    model: input.openAiModel ?? apiEnv.VIDEO_GENERATION_OPENAI_MODEL,
     outputPath: narrationPath,
   });
 
@@ -147,6 +153,9 @@ export async function generateLessonVideo(
   await runCommand(
     "npx",
     [
+      "-y",
+      "-p",
+      REMOTION_CLI_PACKAGE,
       "remotion",
       "render",
       path.posix.join("remotion-jobs", input.jobId, "index.ts"),
@@ -262,7 +271,23 @@ function resolveSlides(
   return parseSlides(script ?? "", fallbackTitle);
 }
 
+export function parseLessonScriptToSlides(script: string, fallbackTitle = "Lesson Segment"): StructuredSlideInput[] {
+  return parseSlides(script, fallbackTitle).map((slide) => ({
+    id: slide.id,
+    layout: slide.layout,
+    title: slide.title,
+    bullets: slide.bullets,
+    callout: slide.callout,
+    narration: slide.narration,
+  }));
+}
+
 function parseSlides(script: string, fallbackTitle: string): SlideSpec[] {
+  const sceneSlides = parseSceneScript(script);
+  if (sceneSlides.length > 0) {
+    return sceneSlides.slice(0, 20);
+  }
+
   const lines = script
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -333,6 +358,92 @@ function parseSlides(script: string, fallbackTitle: string): SlideSpec[] {
     callout: null,
     narration: paragraph,
   }));
+}
+
+function parseSceneScript(script: string): SlideSpec[] {
+  const rawLines = script.split(/\r?\n/);
+  const sceneIndexes: number[] = [];
+
+  rawLines.forEach((line, index) => {
+    if (/^\s*scene\s+\d+/i.test(line)) {
+      sceneIndexes.push(index);
+    }
+  });
+
+  if (sceneIndexes.length === 0) {
+    return [];
+  }
+
+  const slides: SlideSpec[] = [];
+
+  for (let i = 0; i < sceneIndexes.length; i += 1) {
+    const start = sceneIndexes[i] ?? 0;
+    const end = i + 1 < sceneIndexes.length ? (sceneIndexes[i + 1] ?? rawLines.length) : rawLines.length;
+    const block = rawLines.slice(start, end).map((line) => line.trim());
+
+    const sceneMatch = /^scene\s+(\d+)/i.exec(block[0] ?? "");
+    const sceneNumber = sceneMatch?.[1] ?? String(i + 1);
+    let title = `Scene ${sceneNumber}`;
+    const narrationLines: string[] = [];
+    let inNarration = false;
+
+    for (const line of block) {
+      if (!line) {
+        continue;
+      }
+
+      if (/^scene\s+\d+/i.test(line)) {
+        continue;
+      }
+
+      const slideMatch = /^slide\s*:\s*(.+)$/i.exec(line);
+      if (slideMatch?.[1]) {
+        title = normalizeTitle(slideMatch[1]);
+        continue;
+      }
+
+      const narrationMatch = /^narration\s*:?\s*(.*)$/i.exec(line);
+      if (narrationMatch) {
+        inNarration = true;
+        if (narrationMatch[1]) {
+          narrationLines.push(narrationMatch[1]);
+        }
+        continue;
+      }
+
+      if (/^(runtime|module|track|course|owner)\s*:/i.test(line)) {
+        continue;
+      }
+
+      if (inNarration) {
+        narrationLines.push(line);
+      }
+    }
+
+    const narration = narrationLines.join(" ").replace(/\s+/g, " ").trim();
+    if (!narration) {
+      continue;
+    }
+
+    const lowerTitle = title.toLowerCase();
+    const layout: SlideLayout =
+      i === 0
+        ? "title"
+        : lowerTitle.includes("summary") || lowerTitle.includes("transition") || lowerTitle.includes("close")
+          ? "outro"
+          : "bullets";
+
+    slides.push({
+      id: `scene-${sceneNumber}`,
+      layout,
+      title,
+      bullets: toBullets(narration).map((entry) => truncateWords(entry, 12)).slice(0, 4),
+      callout: null,
+      narration,
+    });
+  }
+
+  return slides;
 }
 
 function buildTiming(
@@ -600,6 +711,93 @@ async function synthesizeNarrationWithPolly(input: {
   await runCommand("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", concatFile, "-c:a", "libmp3lame", input.outputPath]);
   await fs.unlink(concatFile).catch(() => undefined);
   await Promise.all(chunkFiles.map((chunkFile) => fs.unlink(chunkFile).catch(() => undefined)));
+}
+
+async function synthesizeNarrationWithOpenAi(input: {
+  text: string;
+  voiceId: string;
+  model: string;
+  outputPath: string;
+}): Promise<void> {
+  if (!apiEnv.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is required for OpenAI TTS.");
+  }
+
+  const chunks = chunkForPolly(input.text, 3800);
+  const chunkFiles: string[] = [];
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index];
+    if (!chunk) {
+      continue;
+    }
+
+    const response = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiEnv.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: input.model,
+        voice: input.voiceId,
+        input: chunk,
+        format: "mp3",
+      }),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`OpenAI TTS request failed (${response.status}): ${detail}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const partPath = `${input.outputPath.replace(/\.mp3$/i, "")}-part-${String(index + 1).padStart(2, "0")}.mp3`;
+    await fs.writeFile(partPath, Buffer.from(arrayBuffer));
+    chunkFiles.push(partPath);
+  }
+
+  if (chunkFiles.length === 0) {
+    throw new Error("OpenAI TTS returned no audio chunks.");
+  }
+
+  if (chunkFiles.length === 1) {
+    await fs.rename(chunkFiles[0], input.outputPath);
+    return;
+  }
+
+  const concatFile = `${input.outputPath.replace(/\.mp3$/i, "")}-concat.txt`;
+  const concatBody = chunkFiles.map((chunkFile) => `file '${chunkFile.replace(/'/g, "'\\''")}'`).join("\n");
+  await fs.writeFile(concatFile, concatBody, "utf8");
+  await runCommand("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", concatFile, "-c:a", "libmp3lame", input.outputPath]);
+  await fs.unlink(concatFile).catch(() => undefined);
+  await Promise.all(chunkFiles.map((chunkFile) => fs.unlink(chunkFile).catch(() => undefined)));
+}
+
+async function synthesizeNarration(input: {
+  provider: TtsProvider;
+  text: string;
+  voiceId: string;
+  engine: PollyEngine;
+  model: string;
+  outputPath: string;
+}): Promise<void> {
+  if (input.provider === "openai-tts") {
+    await synthesizeNarrationWithOpenAi({
+      text: input.text,
+      voiceId: input.voiceId,
+      model: input.model,
+      outputPath: input.outputPath,
+    });
+    return;
+  }
+
+  await synthesizeNarrationWithPolly({
+    text: input.text,
+    voiceId: input.voiceId,
+    engine: input.engine,
+    outputPath: input.outputPath,
+  });
 }
 
 async function audioStreamToBuffer(stream: unknown): Promise<Buffer> {

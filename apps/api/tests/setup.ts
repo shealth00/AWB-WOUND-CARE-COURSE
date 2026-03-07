@@ -3,6 +3,7 @@ process.env.APP_ENV = "test";
 process.env.BASE_URL = "https://www.advancewoundbiologic.com";
 process.env.ADMIN_API_KEY = "development-admin-key";
 process.env.NIGHTLY_SYNC_CRON = "0 2 * * *";
+process.env.SMARTSHEET_REQUIRED = "true";
 process.env.SMARTSHEET_ACCESS_TOKEN = "test-smartsheet-token";
 process.env.SMARTSHEET_INTEGRATION_SOURCE = "APPLICATION,AWB,Academy";
 process.env.DATABASE_URL = "postgres://awb:awb@localhost:5432/awb_test";

@@ -12,7 +12,8 @@
     "lint": "tsc --noEmit -p tsconfig.json",
     "pretest": "npm --prefix ../.. run build:shared",
     "test": "vitest run",
-    "webhook:create": "tsx src/scripts/createWebhook.ts"
+    "webhook:create": "tsx src/scripts/createWebhook.ts",
+    "build-course": "tsx src/scripts/buildCourse.ts"
   },
   "dependencies": {
     "@awb/lms-core": "*",

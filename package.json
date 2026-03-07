@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "test": "npm run test:unit && npm run test:api",
     "build": "npm run build:shared && npm run build --workspace @awb/api && npm run build --workspace @awb/web",
-    "lint": "npm run lint --workspace @awb/lms-core && npm run lint --workspace @awb/smartsheet-client && npm run lint --workspace @awb/api && npm run lint --workspace @awb/web"
+    "lint": "npm run lint --workspace @awb/lms-core && npm run lint --workspace @awb/smartsheet-client && npm run lint --workspace @awb/api && npm run lint --workspace @awb/web",
+    "build-course": "npm run build-course --workspace @awb/api"
   },
   "devDependencies": {
     "@playwright/test": "1.52.0"

@@ -18,7 +18,29 @@ Common commands:
 - `npm run test`
 - `npm run lint`
 - `npm run build`
+- `npm run build-course -- --file ./path/to/lessons.json --wait`
 - `npm run webhook:create --workspace @awb/api`
+
+`build-course` manifest example:
+
+```json
+{
+  "lessons": [
+    {
+      "course": "AWB Academy",
+      "track": "Core",
+      "module": "M1",
+      "lessonCode": "M1-V1",
+      "title": "Where Wound Patients Come From",
+      "runtime": 540,
+      "scriptPath": "./scripts/M1-V1.txt",
+      "ttsProvider": "aws-polly",
+      "voiceId": "Joanna",
+      "voiceEngine": "neural"
+    }
+  ]
+}
+```
 
 Admin authentication:
 
@@ -29,6 +51,12 @@ Admin authentication:
 - Optional audit headers:
   - `x-awb-actor`
   - `x-awb-role` (`admin` or `ops`)
+
+Video generation:
+
+- TTS providers: `aws-polly` (default) and `openai-tts`
+- Required env for OpenAI TTS: `OPENAI_API_KEY`
+- Optional OpenAI model override: `VIDEO_GENERATION_OPENAI_MODEL` (default `gpt-4o-mini-tts`)
 
 Nightly sync:
 

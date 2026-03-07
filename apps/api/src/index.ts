@@ -53,6 +53,7 @@ import {
   detectMedia,
   ensureMediaStorageDirectories,
   getMediaTempDir,
+  inferMimeTypeFromFileName,
   inspectMediaProcessing,
   type MediaType,
   moveUploadToMediaStorage,
@@ -127,12 +128,17 @@ interface MediaAssetRow {
 }
 
 function mapMediaAsset(row: MediaAssetRow) {
+  const normalizedMimeType =
+    row.mime_type && row.mime_type !== "application/octet-stream"
+      ? row.mime_type
+      : (inferMimeTypeFromFileName(row.storage_name) ?? row.mime_type);
+
   return {
     assetId: row.asset_id,
     title: row.title,
     description: row.description,
     mediaType: row.media_type,
-    mimeType: row.mime_type,
+    mimeType: normalizedMimeType,
     fileExt: row.file_ext,
     fileSize: Number(row.file_size),
     storageName: row.storage_name,
@@ -148,10 +154,12 @@ function mapMediaAsset(row: MediaAssetRow) {
 
 interface VideoGenerationRequestPayload {
   lessonId: string | null;
+  lessonCode: string | null;
   lessonTitle: string;
   moduleTitle: string;
   track: string;
   owner: string;
+  runtimeSec: number | null;
   script: string | null;
   slides: Array<{
     id: string;
@@ -161,8 +169,10 @@ interface VideoGenerationRequestPayload {
     callout: string | null;
     narration: string;
   }> | null;
+  ttsProvider: "aws-polly" | "openai-tts";
   voiceId: string;
   voiceEngine: "standard" | "neural" | "long-form" | "generative";
+  openAiModel: string;
   renderWidth: number;
   renderHeight: number;
   renderFps: number;
@@ -201,8 +211,21 @@ const canonicalSlideSchema = z.object({
   narration: z.string().trim().min(1).max(2000),
 });
 
+const canonicalSceneSchema = z.object({
+  id: z.string().trim().min(1).max(120).optional(),
+  scene: z.coerce.number().int().positive().max(500).optional(),
+  slide: z.string().trim().min(1).max(220),
+  narration: z.string().trim().min(1).max(2000),
+  estimatedDurationSec: z.coerce.number().positive().max(3600).optional(),
+});
+
 const videoGenerationPayloadSchema = z
   .object({
+  course: z.string().trim().min(1).max(160).optional(),
+  module: z.string().trim().min(1).max(220).optional(),
+  lessonCode: z.string().trim().min(1).max(120).optional(),
+  title: z.string().trim().min(1).max(220).optional(),
+  runtime: z.coerce.number().int().positive().max(7200).optional(),
   lessonId: z.string().trim().min(1).optional(),
   lessonTitle: z.string().trim().min(1).max(220).optional(),
   moduleTitle: z.string().trim().min(1).max(220).optional(),
@@ -217,13 +240,17 @@ const videoGenerationPayloadSchema = z
     .optional(),
   script: z.string().trim().min(1).max(apiEnv.VIDEO_GENERATION_MAX_SCRIPT_CHARS).optional(),
   slides: z.array(canonicalSlideSchema).min(1).max(50).optional(),
+  scenes: z.array(canonicalSceneSchema).min(1).max(80).optional(),
+  ttsProvider: z.enum(["aws-polly", "openai-tts"]).optional(),
   voiceId: z.string().trim().min(1).max(80).default(apiEnv.VIDEO_GENERATION_DEFAULT_VOICE),
   voiceEngine: z.enum(["standard", "neural", "long-form", "generative"]).default("neural"),
+  openAiModel: z.string().trim().min(1).max(120).optional(),
   voice: z
     .object({
-      provider: z.string().trim().optional(),
+      provider: z.enum(["aws-polly", "openai-tts"]).optional(),
       voiceId: z.string().trim().min(1).max(80),
       engine: z.enum(["standard", "neural", "long-form", "generative"]).default("neural"),
+      model: z.string().trim().min(1).max(120).optional(),
     })
     .optional(),
   render: z
@@ -247,10 +274,10 @@ const videoGenerationPayloadSchema = z
   syncSmartsheetVideoUrl: z.coerce.boolean().optional(),
   })
   .superRefine((value, context) => {
-    if (!value.script && (!value.slides || value.slides.length === 0)) {
+    if (!value.script && (!value.slides || value.slides.length === 0) && (!value.scenes || value.scenes.length === 0)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Provide either script or slides for generation.",
+        message: "Provide script, slides, or scenes for generation.",
         path: ["script"],
       });
     }
@@ -315,9 +342,13 @@ function mapVideoGenerationJob(row: VideoGenerationJobRow) {
     payload: {
       lessonTitle: typeof payload.lessonTitle === "string" ? payload.lessonTitle : null,
       moduleTitle: typeof payload.moduleTitle === "string" ? payload.moduleTitle : null,
+      lessonCode: typeof payload.lessonCode === "string" ? payload.lessonCode : null,
       track: typeof payload.track === "string" ? payload.track : null,
       owner: typeof payload.owner === "string" ? payload.owner : null,
+      runtimeSec: typeof payload.runtimeSec === "number" ? payload.runtimeSec : null,
+      ttsProvider: typeof payload.ttsProvider === "string" ? payload.ttsProvider : null,
       voiceEngine: typeof payload.voiceEngine === "string" ? payload.voiceEngine : null,
+      openAiModel: typeof payload.openAiModel === "string" ? payload.openAiModel : null,
       renderWidth: typeof payload.renderWidth === "number" ? payload.renderWidth : null,
       renderHeight: typeof payload.renderHeight === "number" ? payload.renderHeight : null,
       renderFps: typeof payload.renderFps === "number" ? payload.renderFps : null,
@@ -371,6 +402,44 @@ function queueVideoGeneration(jobId: string): void {
   });
 }
 
+async function attachVideoToLessonRecord(input: {
+  lessonId: string;
+  videoUrl: string;
+  overwriteExistingVideo: boolean;
+}): Promise<{ sourceRowId: string | null }> {
+  if (!input.overwriteExistingVideo) {
+    const [currentLesson] = await query<{ video_url: string | null }>(
+      `
+        select video_url
+        from content_lessons
+        where lesson_id = $1
+        limit 1
+      `,
+      [input.lessonId],
+    );
+
+    if (currentLesson?.video_url) {
+      throw new Error(
+        "overwriteExistingVideo=false and lesson already has a VideoUrl. Set overwriteExistingVideo=true to replace it.",
+      );
+    }
+  }
+
+  const [lessonRow] = await query<{ source_row_id: string | null }>(
+    `
+      update content_lessons
+      set video_url = $2
+      where lesson_id = $1
+      returning source_row_id
+    `,
+    [input.lessonId, input.videoUrl],
+  );
+
+  return {
+    sourceRowId: lessonRow?.source_row_id ?? null,
+  };
+}
+
 async function processVideoGenerationJob(jobId: string): Promise<void> {
   const [job] = await query<VideoGenerationJobRow>(
     `
@@ -418,8 +487,10 @@ async function processVideoGenerationJob(jobId: string): Promise<void> {
       owner: payload.owner ?? "AWB Academy",
       script: payload.script ?? null,
       slides: payload.slides ?? null,
+      ttsProvider: payload.ttsProvider,
       voiceId: payload.voiceId,
       voiceEngine: payload.voiceEngine,
+      openAiModel: payload.openAiModel,
       render: {
         width: payload.renderWidth,
         height: payload.renderHeight,
@@ -499,35 +570,12 @@ async function processVideoGenerationJob(jobId: string): Promise<void> {
     let sourceRowId = job.source_row_id;
 
     if (shouldUpdateLesson) {
-      if (!payload.overwriteExistingVideo) {
-        const [currentLesson] = await query<{ video_url: string | null }>(
-          `
-            select video_url
-            from content_lessons
-            where lesson_id = $1
-            limit 1
-          `,
-          [payload.lessonId],
-        );
-
-        if (currentLesson?.video_url) {
-          throw new Error(
-            "overwriteExistingVideo=false and lesson already has a VideoUrl. Set overwriteExistingVideo=true to replace it.",
-          );
-        }
-      }
-
-      const [lessonRow] = await query<{ source_row_id: string | null }>(
-        `
-          update content_lessons
-          set video_url = $2
-          where lesson_id = $1
-          returning source_row_id
-        `,
-        [payload.lessonId, contentUrl],
-      );
-
-      sourceRowId = lessonRow?.source_row_id ?? sourceRowId;
+      const attachResult = await attachVideoToLessonRecord({
+        lessonId: payload.lessonId!,
+        videoUrl: contentUrl,
+        overwriteExistingVideo: payload.overwriteExistingVideo,
+      });
+      sourceRowId = attachResult.sourceRowId ?? sourceRowId;
     }
 
     if (payload.publishAfterGenerate && payload.lessonId) {
@@ -631,6 +679,9 @@ app.get(["/health", "/api/health"], async (_req, res) => {
   );
   const smartsheet = await getSmartsheetHealthReport();
   const status = smartsheet.ok ? "ok" : "degraded";
+  const smartsheetDependency = smartsheet.required
+    ? (smartsheet.ok ? "ok" : "degraded")
+    : "disabled";
 
   res.json({
     status,
@@ -638,7 +689,7 @@ app.get(["/health", "/api/health"], async (_req, res) => {
     service: "api",
     version: apiEnv.APP_VERSION,
     dependencies: {
-      smartsheet: smartsheet.ok ? "ok" : "degraded",
+      smartsheet: smartsheetDependency,
     },
     latestSync: latestSync
       ? {
@@ -1028,7 +1079,11 @@ app.get(["/assets/:assetId/content", "/api/assets/:assetId/content"], async (req
   const fileName = safeFileName(row.storage_name);
 
   res.setHeader("Accept-Ranges", "bytes");
-  res.setHeader("Content-Type", row.mime_type);
+  const responseMimeType =
+    row.mime_type && row.mime_type !== "application/octet-stream"
+      ? row.mime_type
+      : (inferMimeTypeFromFileName(row.storage_name) ?? "application/octet-stream");
+  res.setHeader("Content-Type", responseMimeType);
   res.setHeader("Content-Disposition", `${disposition}; filename="${fileName}"`);
 
   if (rangeHeader) {
@@ -3015,10 +3070,22 @@ app.post(
 
   const resolvedPayload: VideoGenerationRequestPayload = {
     lessonId: payload.lessonId ?? null,
-    lessonTitle: payload.lessonTitle ?? lessonMeta.lessonTitle ?? lessonRow?.lesson_title ?? "",
-    moduleTitle: payload.moduleTitle ?? lessonMeta.moduleTitle ?? lessonRow?.module_title ?? "",
+    lessonCode: payload.lessonCode ?? payload.lessonId ?? null,
+    lessonTitle:
+      payload.lessonTitle ??
+      payload.title ??
+      lessonMeta.lessonTitle ??
+      lessonRow?.lesson_title ??
+      "",
+    moduleTitle:
+      payload.moduleTitle ??
+      payload.module ??
+      lessonMeta.moduleTitle ??
+      lessonRow?.module_title ??
+      "",
     track: payload.track ?? lessonMeta.track ?? lessonRow?.track ?? "",
-    owner: payload.owner ?? lessonRow?.owner ?? "AWB Academy",
+    owner: payload.owner ?? payload.course ?? lessonRow?.owner ?? "AWB Academy",
+    runtimeSec: payload.runtime ?? null,
     script: payload.script ?? null,
     slides:
       payload.slides?.map((slide, index) => ({
@@ -3028,9 +3095,20 @@ app.post(
         bullets: slide.bullets ?? [],
         callout: slide.callout ?? null,
         narration: slide.narration,
-      })) ?? null,
+      })) ??
+      payload.scenes?.map((scene, index) => ({
+        id: scene.id ?? `scene-${scene.scene ?? index + 1}`,
+        layout: index === 0 ? "title" : "bullets",
+        title: scene.slide,
+        bullets: [],
+        callout: null,
+        narration: scene.narration,
+      })) ??
+      null,
+    ttsProvider: voice?.provider ?? payload.ttsProvider ?? apiEnv.VIDEO_GENERATION_DEFAULT_PROVIDER,
     voiceId: voice?.voiceId ?? payload.voiceId,
     voiceEngine: voice?.engine ?? payload.voiceEngine,
+    openAiModel: voice?.model ?? payload.openAiModel ?? apiEnv.VIDEO_GENERATION_OPENAI_MODEL,
     renderWidth: render?.width ?? 1920,
     renderHeight: render?.height ?? 1080,
     renderFps: render?.fps ?? 30,
@@ -3061,6 +3139,13 @@ app.post(
   if (missingFields.length > 0) {
     res.status(400).json({
       error: `Missing required generation fields: ${missingFields.join(", ")}.`,
+    });
+    return;
+  }
+
+  if (resolvedPayload.ttsProvider === "openai-tts" && !apiEnv.OPENAI_API_KEY) {
+    res.status(400).json({
+      error: "OPENAI_API_KEY is required when ttsProvider=openai-tts.",
     });
     return;
   }
@@ -3945,11 +4030,12 @@ export async function startServer() {
     env: apiEnv.APP_ENV,
     version: apiEnv.APP_VERSION,
     smartsheetConfigured: smartsheetStartup.configured,
+    smartsheetRequired: smartsheetStartup.required,
     missingKeys: smartsheetStartup.missingKeys,
     sheetChecks: smartsheetStartup.sheetChecks,
   });
   console.log(
-    `[startup] Smartsheet configured=${smartsheetStartup.configured} ok=${smartsheetStartup.ok}`,
+    `[startup] Smartsheet required=${smartsheetStartup.required} configured=${smartsheetStartup.configured} ok=${smartsheetStartup.ok}`,
   );
   if (smartsheetStartup.missingKeys.length > 0) {
     console.warn(
