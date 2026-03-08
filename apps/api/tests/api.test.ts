@@ -164,11 +164,48 @@ describe("AWB API", () => {
     expect(response.body.lessons[0].lesson_id).toBe("LESSON-1");
   });
 
+  it("returns the homepage experiment config for A/B testing", async () => {
+    const response = await request(app).get("/experiments/catalog-hero/config");
+
+    expect(response.status).toBe(200);
+    expect(response.body.experimentId).toBe("catalog-hero-v1");
+    expect(response.body.variants).toHaveLength(2);
+    expect(response.body.variants[0].primaryCta.href).toBe("#catalog");
+  });
+
   it("returns 404 when a lesson is not found", async () => {
     const response = await request(app).get("/lessons/MISSING");
 
     expect(response.status).toBe(404);
     expect(response.body.error).toBe("Lesson not found.");
+  });
+
+  it("records experiment events for homepage impressions and CTA clicks", async () => {
+    const response = await request(app).post("/experiments/events").send({
+      experimentId: "catalog-hero-v1",
+      variantId: "b",
+      eventType: "cta-click",
+      sessionKey: "session-123",
+      path: "/?abVariant=b&debug=1",
+      metadata: {
+        ctaId: "catalog-primary",
+        href: "#catalog",
+      },
+    });
+
+    expect(response.status).toBe(202);
+    expect(response.body.accepted).toBe(true);
+    expect(response.body.variantId).toBe("b");
+    expect(dbMock.query).toHaveBeenCalledWith(
+      expect.stringContaining("insert into experiment_events"),
+      expect.arrayContaining([
+        expect.any(String),
+        "catalog-hero-v1",
+        "b",
+        "cta-click",
+        "session-123",
+      ]),
+    );
   });
 
   it("scores and generates an audit-ready wound note", async () => {
@@ -429,6 +466,58 @@ describe("AWB API", () => {
     expect(response.status).toBe(200);
     expect(response.headers["smartsheet-hook-response"]).toBe("challenge-token");
     expect(response.body.challenge).toBe("challenge-token");
+  });
+
+  it("returns an admin experiment report with CTR summary and recent events", async () => {
+    dbMock.query
+      .mockResolvedValueOnce([
+        {
+          variant_id: "a",
+          event_type: "impression",
+          event_count: "12",
+          session_count: "10",
+        },
+        {
+          variant_id: "a",
+          event_type: "cta-click",
+          event_count: "4",
+          session_count: "3",
+        },
+        {
+          variant_id: "b",
+          event_type: "impression",
+          event_count: "9",
+          session_count: "8",
+        },
+        {
+          variant_id: "b",
+          event_type: "cta-click",
+          event_count: "5",
+          session_count: "4",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          variant_id: "b",
+          event_type: "cta-click",
+          session_key: "session-b-1",
+          user_id: null,
+          path: "/?abVariant=b&debug=1",
+          metadata: { ctaId: "catalog-primary" },
+          created_at: "2026-03-07T12:00:00.000Z",
+        },
+      ]);
+
+    const response = await request(app)
+      .get("/admin/experiments/report")
+      .set("x-admin-key", "development-admin-key");
+
+    expect(response.status).toBe(200);
+    expect(response.body.experimentId).toBe("catalog-hero-v1");
+    expect(response.body.variants).toHaveLength(2);
+    expect(response.body.variants[0].ctr).toBe(30);
+    expect(response.body.variants[1].ctr).toBe(50);
+    expect(response.body.recentEvents[0].eventType).toBe("cta-click");
   });
 
   it("rejects non-admin sheet sharing and enforces role restrictions", async () => {

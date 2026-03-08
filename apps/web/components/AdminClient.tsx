@@ -44,6 +44,41 @@ interface DiagnosticResult {
   detail: string;
 }
 
+interface ExperimentReportResponse {
+  experimentId: string;
+  name: string;
+  status: string;
+  hypothesis: string;
+  qa: {
+    overrideParam: string;
+    debugParam: string;
+  };
+  variants: Array<{
+    variantId: string;
+    label: string;
+    headline: string;
+    impressions: number;
+    impressionSessions: number;
+    clicks: number;
+    clickSessions: number;
+    ctr: number;
+  }>;
+  totals: {
+    impressionSessions: number;
+    clickSessions: number;
+    ctr: number;
+  };
+  recentEvents: Array<{
+    variantId: string;
+    eventType: string;
+    sessionKey: string;
+    userId: string | null;
+    path: string | null;
+    metadata: Record<string, unknown>;
+    createdAt: string;
+  }>;
+}
+
 const ADMIN_TOKEN_KEY = "awb-admin-token";
 
 type VideoGenerationStatus =
@@ -169,6 +204,8 @@ export function AdminClient() {
   const [busy, setBusy] = useState(false);
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult[]>([]);
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+  const [experimentReport, setExperimentReport] = useState<ExperimentReportResponse | null>(null);
+  const [experimentBusy, setExperimentBusy] = useState(false);
   const [uploadingAsset, setUploadingAsset] = useState(false);
   const [videoJobs, setVideoJobs] = useState<VideoGenerationJob[]>([]);
   const [videoJobsBusy, setVideoJobsBusy] = useState(false);
@@ -257,6 +294,7 @@ export function AdminClient() {
       setToken("");
       setDashboard(null);
       setForms([]);
+      setExperimentReport(null);
       setNotice("Logged out.");
       setBusy(false);
     }
@@ -314,6 +352,7 @@ export function AdminClient() {
       }
 
       await loadDashboard();
+      setExperimentReport(null);
       setNotice(
         `Reset complete. Seeded lessons: ${payload.seededLessons ?? 0}. Seeded questions: ${payload.seededQuestions ?? 0}.`,
       );
@@ -555,7 +594,13 @@ export function AdminClient() {
     setError(null);
     setNotice(null);
 
-    const endpoints = ["/health", "/catalog", "/quiz/config"];
+    const endpoints = [
+      "/health",
+      "/catalog",
+      "/quiz/config",
+      "/experiments/catalog-hero/config",
+      "/progress/path?userId=demo-user&track=Provider%20Track",
+    ];
 
     try {
       const results = await Promise.all(
@@ -597,10 +642,37 @@ export function AdminClient() {
           `Diagnostics found ${failing.length} failing endpoint(s).`,
         );
       } else {
-        setNotice("Diagnostics passed for health/catalog/quiz-config.");
+        setNotice("Diagnostics passed for health/catalog/quiz-config/experiment/progress.");
       }
     } finally {
       setDiagnosticsBusy(false);
+    }
+  }
+
+  async function loadExperimentReport() {
+    setExperimentBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(
+        apiUrl("/admin/experiments/report?experimentId=catalog-hero-v1"),
+        {
+          headers: adminHeaders(),
+        },
+      );
+      const payload = (await response.json()) as ExperimentReportResponse | { error?: string };
+
+      if (!response.ok) {
+        throw new Error("error" in payload ? payload.error ?? "Experiment report failed." : "Experiment report failed.");
+      }
+
+      setExperimentReport(payload as ExperimentReportResponse);
+      setNotice("Experiment report loaded.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Experiment report failed.");
+    } finally {
+      setExperimentBusy(false);
     }
   }
 
@@ -757,7 +829,7 @@ export function AdminClient() {
         <details>
           <summary>Diagnostics (hidden)</summary>
           <p className="muted">
-            Runs GET checks for `/api/health`, `/api/catalog`, and `/api/quiz/config`.
+            Runs GET checks for `/api/health`, `/api/catalog`, `/api/quiz/config`, the hero experiment config, and a learner progression path.
           </p>
           <div className="actions">
             <button
@@ -785,6 +857,91 @@ export function AdminClient() {
             </div>
           ) : null}
         </details>
+      </section>
+
+      <section className="card">
+        <h2>Experiment QA + troubleshooting</h2>
+        <p className="muted">
+          Load the homepage A/B test report, verify variant traffic, and use forced variants for debugging.
+        </p>
+        <div className="actions">
+          <button
+            className="button secondary"
+            disabled={!isAuthenticated || experimentBusy}
+            onClick={() => void loadExperimentReport()}
+            type="button"
+          >
+            {experimentBusy ? "Loading..." : "Load experiment report"}
+          </button>
+          <a className="button secondary" href="/?abVariant=a&debug=1" target="_blank">
+            Open variant A debug
+          </a>
+          <a className="button secondary" href="/?abVariant=b&debug=1" target="_blank">
+            Open variant B debug
+          </a>
+        </div>
+        <div className="stack" style={{ marginTop: 16 }}>
+          <div className="question">
+            <strong>Troubleshooting flow</strong>
+            <div className="muted">
+              1. Run diagnostics. 2. Open a forced variant with <span className="mono">?abVariant=a|b&amp;debug=1</span>. 3. Load the report and confirm impressions/clicks move.
+            </div>
+          </div>
+          {experimentReport ? (
+            <>
+              <div className="question">
+                <strong>{experimentReport.name}</strong>
+                <div className="muted">{experimentReport.hypothesis}</div>
+                <div className="muted">
+                  Totals: {experimentReport.totals.impressionSessions} impression sessions /{" "}
+                  {experimentReport.totals.clickSessions} click sessions / CTR {experimentReport.totals.ctr}%
+                </div>
+              </div>
+              <div className="split">
+                {experimentReport.variants.map((variant) => (
+                  <div className="question" key={variant.variantId}>
+                    <strong>
+                      Variant {variant.variantId.toUpperCase()} / {variant.label}
+                    </strong>
+                    <div className="muted">{variant.headline}</div>
+                    <div className="muted">
+                      Impressions {variant.impressions} ({variant.impressionSessions} sessions)
+                    </div>
+                    <div className="muted">
+                      CTA clicks {variant.clicks} ({variant.clickSessions} sessions)
+                    </div>
+                    <div className={variant.ctr >= 15 ? "status-good" : "status-warn"}>
+                      CTR {variant.ctr}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="stack">
+                {experimentReport.recentEvents.length > 0 ? (
+                  experimentReport.recentEvents.slice(0, 8).map((event) => (
+                    <div className="question" key={`${event.createdAt}-${event.sessionKey}-${event.eventType}`}>
+                      <strong>
+                        {event.eventType} / variant {event.variantId.toUpperCase()}
+                      </strong>
+                      <div className="mono muted">{event.sessionKey}</div>
+                      <div className="muted">
+                        {event.path ?? "no-path"} / {new Date(event.createdAt).toLocaleString()}
+                      </div>
+                      <div className="mono muted">{truncate(JSON.stringify(event.metadata))}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="question">
+                    <strong>No experiment events recorded yet.</strong>
+                    <div className="muted">
+                      Open the homepage with a forced variant and click a hero CTA to generate the first events.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : null}
+        </div>
       </section>
 
       {notice ? <div className="card status-good">{notice}</div> : null}

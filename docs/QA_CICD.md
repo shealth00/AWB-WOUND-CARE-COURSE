@@ -32,6 +32,38 @@ Run the end-to-end browser check:
 npm run test:e2e
 ```
 
+Run the admin A/B experiment smoke manually:
+
+```bash
+curl -sS http://127.0.0.1:4000/api/experiments/catalog-hero/config | jq
+
+curl -sS -X POST http://127.0.0.1:4000/api/experiments/events \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "experimentId":"catalog-hero-v1",
+    "variantId":"a",
+    "eventType":"impression",
+    "sessionKey":"qa-session-a",
+    "path":"/?abVariant=a&debug=1",
+    "metadata":{"source":"qa-smoke"}
+  }'
+
+curl -sS -X POST http://127.0.0.1:4000/api/experiments/events \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "experimentId":"catalog-hero-v1",
+    "variantId":"a",
+    "eventType":"cta-click",
+    "sessionKey":"qa-session-a",
+    "path":"/?abVariant=a&debug=1",
+    "metadata":{"ctaId":"catalog-primary","href":"#catalog"}
+  }'
+
+curl -sS \
+  -H 'x-admin-key: development-admin-key' \
+  'http://127.0.0.1:4000/api/admin/experiments/report?experimentId=catalog-hero-v1' | jq
+```
+
 Run the full verification pass:
 
 ```bash
@@ -159,5 +191,16 @@ Web environment:
 
 - `NEXT_PUBLIC_API_BASE_URL`
 - `NEXT_PUBLIC_APP_ENV`
+
+## Admin QA checklist
+
+Admin-authenticated troubleshooting for the homepage experiment:
+
+1. Open `/?abVariant=a&debug=1` and confirm the variant A headline and debug panel render.
+2. Open `/?abVariant=b&debug=1` and confirm the variant B headline and debug panel render.
+3. Click the primary CTA in each variant and confirm the URL updates to `#catalog` or the intended route.
+4. In Admin, run diagnostics and confirm health, catalog, quiz config, experiment config, and progression all return `OK`.
+5. In Admin, load the experiment report and confirm impressions, clicks, and CTR update after the forced-variant clicks.
+6. If the report stays empty, inspect `/api/experiments/events` network requests before debugging the report query.
 
 The deploy workflow assumes these runtime values are already present on the target host through environment files, systemd `EnvironmentFile=` configuration, or another secret-management path.

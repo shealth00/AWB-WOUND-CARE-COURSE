@@ -105,6 +105,124 @@ const mediaUpload = multer({
 
 app.use(express.json({ limit: "2mb" }));
 
+interface HeroExperimentVariantConfig {
+  id: "a" | "b";
+  label: string;
+  eyebrow: string;
+  headline: string;
+  body: string;
+  bullets: string[];
+  stats: Array<{
+    value: string;
+    label: string;
+  }>;
+  primaryCta: {
+    id: string;
+    label: string;
+    href: string;
+  };
+  secondaryCta: {
+    id: string;
+    label: string;
+    href: string;
+  };
+}
+
+const HERO_EXPERIMENT = {
+  id: "catalog-hero-v1",
+  name: "Catalog Hero Messaging",
+  status: "active",
+  hypothesis:
+    "Audit-forward versus workflow-forward homepage messaging changes catalog engagement and downstream CTA activity.",
+  qa: {
+    overrideParam: "abVariant",
+    debugParam: "debug",
+  },
+  variants: [
+    {
+      id: "a",
+      label: "Audit-forward",
+      eyebrow: "Compliance-first launch path",
+      headline: "Audit-ready wound-care learning with measurable progression",
+      body:
+        "This variant leads with documentation integrity, quiz gating, certificate verification, and LCD-centered learner readiness for providers, facilities, and commercial teams.",
+      bullets: [
+        "Five audience tracks with gated module progression",
+        "Quizzes, final exams, and certificate verification in one system",
+        "Shared LCD documentation workflow across clinic, facility, and field teams",
+      ],
+      stats: [
+        { value: "5", label: "audience tracks" },
+        { value: "90%", label: "lesson completion threshold" },
+        { value: "80%", label: "exam pass mark" },
+      ],
+      primaryCta: {
+        id: "catalog-primary",
+        label: "Browse learning paths",
+        href: "#catalog",
+      },
+      secondaryCta: {
+        id: "lcd-secondary",
+        label: "Review LCD updates",
+        href: "/lcd-updates",
+      },
+    },
+    {
+      id: "b",
+      label: "Workflow-forward",
+      eyebrow: "Operations-first launch path",
+      headline: "Training, intake, forms, and admin follow-through in one workflow",
+      body:
+        "This variant emphasizes end-to-end operating flow: course delivery, facility packets, intake routing, troubleshooting, and admin reporting under the same AWB Academy stack.",
+      bullets: [
+        "Track learner flow from catalog to certificate without leaving the platform",
+        "Route facility packets, training requests, and follow-up forms through one operational layer",
+        "Give admins visible diagnostics, reset controls, and experiment reporting for QA",
+      ],
+      stats: [
+        { value: "3", label: "ops forms in platform" },
+        { value: "1", label: "admin troubleshooting console" },
+        { value: "24/7", label: "self-serve certificate verification" },
+      ],
+      primaryCta: {
+        id: "catalog-primary",
+        label: "Start the catalog flow",
+        href: "#catalog",
+      },
+      secondaryCta: {
+        id: "forms-secondary",
+        label: "Open intake forms",
+        href: "/forms",
+      },
+    },
+  ] satisfies HeroExperimentVariantConfig[],
+} as const;
+
+const experimentEventSchema = z.object({
+  experimentId: z.string().trim().min(1),
+  variantId: z.string().trim().min(1),
+  eventType: z.enum(["impression", "cta-click"]),
+  sessionKey: z.string().trim().min(1).max(160),
+  userId: z.string().trim().min(1).max(160).optional(),
+  path: z.string().trim().min(1).max(600).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+function resolveHeroExperimentVariant(variantId: string) {
+  return HERO_EXPERIMENT.variants.find((variant) => variant.id === variantId);
+}
+
+function buildHeroExperimentConfig() {
+  return {
+    experimentId: HERO_EXPERIMENT.id,
+    name: HERO_EXPERIMENT.name,
+    status: HERO_EXPERIMENT.status,
+    hypothesis: HERO_EXPERIMENT.hypothesis,
+    qa: HERO_EXPERIMENT.qa,
+    variants: HERO_EXPERIMENT.variants,
+  };
+}
+
 function hashTokenFingerprint(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -1118,6 +1236,62 @@ app.get(["/lcd-updates", "/api/lcd-updates"], (_req, res) => {
   res.json({
     updates: PROGRAM_CATALOG.lcdUpdateLog,
     strategy: PROGRAM_CATALOG.latestLcdHandling,
+  });
+});
+
+app.get(["/experiments/catalog-hero/config", "/api/experiments/catalog-hero/config"], (_req, res) => {
+  res.json(buildHeroExperimentConfig());
+});
+
+app.post(["/experiments/events", "/api/experiments/events"], async (req, res) => {
+  const parseResult = experimentEventSchema.safeParse(req.body);
+
+  if (!parseResult.success) {
+    res.status(400).json({ error: parseResult.error.flatten() });
+    return;
+  }
+
+  const payload = parseResult.data;
+
+  if (payload.experimentId !== HERO_EXPERIMENT.id) {
+    res.status(404).json({ error: "Experiment not found." });
+    return;
+  }
+
+  const variant = resolveHeroExperimentVariant(payload.variantId);
+
+  if (!variant) {
+    res.status(400).json({ error: "Variant is not valid for this experiment." });
+    return;
+  }
+
+  const eventId = randomUUID();
+
+  await query(
+    `
+      insert into experiment_events (
+        event_id, experiment_id, variant_id, event_type, session_key, user_id, path, metadata
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
+    `,
+    [
+      eventId,
+      payload.experimentId,
+      payload.variantId,
+      payload.eventType,
+      payload.sessionKey,
+      payload.userId ?? null,
+      payload.path ?? null,
+      payload.metadata ?? {},
+    ],
+  );
+
+  res.status(202).json({
+    accepted: true,
+    eventId,
+    experimentId: payload.experimentId,
+    variantId: payload.variantId,
+    eventType: payload.eventType,
   });
 });
 
@@ -3374,6 +3548,114 @@ app.get(["/admin/diagnostics", "/api/admin/diagnostics"], requireAdmin, async (_
     version: apiEnv.APP_VERSION,
     latestSync: latestSync ?? null,
     sheets,
+  });
+});
+
+app.get(["/admin/experiments/report", "/api/admin/experiments/report"], requireAdmin, async (req, res) => {
+  const schema = z.object({
+    experimentId: z.string().trim().min(1).default(HERO_EXPERIMENT.id),
+  });
+  const parseResult = schema.safeParse(req.query);
+
+  if (!parseResult.success) {
+    res.status(400).json({ error: parseResult.error.flatten() });
+    return;
+  }
+
+  const { experimentId } = parseResult.data;
+
+  if (experimentId !== HERO_EXPERIMENT.id) {
+    res.status(404).json({ error: "Experiment not found." });
+    return;
+  }
+
+  const aggregateRows = await query<{
+    variant_id: string;
+    event_type: string;
+    event_count: string;
+    session_count: string;
+  }>(
+    `
+      select
+        variant_id,
+        event_type,
+        count(*)::text as event_count,
+        count(distinct session_key)::text as session_count
+      from experiment_events
+      where experiment_id = $1
+      group by variant_id, event_type
+      order by variant_id asc, event_type asc
+    `,
+    [experimentId],
+  );
+  const recentEvents = await query<{
+    variant_id: string;
+    event_type: string;
+    session_key: string;
+    user_id: string | null;
+    path: string | null;
+    metadata: Record<string, unknown> | null;
+    created_at: string;
+  }>(
+    `
+      select variant_id, event_type, session_key, user_id, path, metadata, created_at
+      from experiment_events
+      where experiment_id = $1
+      order by created_at desc
+      limit 25
+    `,
+    [experimentId],
+  );
+
+  const variants = HERO_EXPERIMENT.variants.map((variant) => {
+    const impressionRow = aggregateRows.find(
+      (row) => row.variant_id === variant.id && row.event_type === "impression",
+    );
+    const clickRow = aggregateRows.find(
+      (row) => row.variant_id === variant.id && row.event_type === "cta-click",
+    );
+    const impressionSessions = Number(impressionRow?.session_count ?? 0);
+    const clickSessions = Number(clickRow?.session_count ?? 0);
+
+    return {
+      variantId: variant.id,
+      label: variant.label,
+      headline: variant.headline,
+      impressions: Number(impressionRow?.event_count ?? 0),
+      impressionSessions,
+      clicks: Number(clickRow?.event_count ?? 0),
+      clickSessions,
+      ctr: impressionSessions > 0 ? Number(((clickSessions / impressionSessions) * 100).toFixed(1)) : 0,
+    };
+  });
+
+  const totalImpressionSessions = variants.reduce((sum, variant) => sum + variant.impressionSessions, 0);
+  const totalClickSessions = variants.reduce((sum, variant) => sum + variant.clickSessions, 0);
+
+  res.json({
+    experimentId,
+    name: HERO_EXPERIMENT.name,
+    status: HERO_EXPERIMENT.status,
+    hypothesis: HERO_EXPERIMENT.hypothesis,
+    qa: HERO_EXPERIMENT.qa,
+    variants,
+    totals: {
+      impressionSessions: totalImpressionSessions,
+      clickSessions: totalClickSessions,
+      ctr:
+        totalImpressionSessions > 0
+          ? Number(((totalClickSessions / totalImpressionSessions) * 100).toFixed(1))
+          : 0,
+    },
+    recentEvents: recentEvents.map((row) => ({
+      variantId: row.variant_id,
+      eventType: row.event_type,
+      sessionKey: row.session_key,
+      userId: row.user_id,
+      path: row.path,
+      metadata: row.metadata ?? {},
+      createdAt: row.created_at,
+    })),
   });
 });
 

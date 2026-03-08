@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const apiBaseUrl = "http://127.0.0.1:3101/mock-api";
 const certificateId = "AWB-AWC-SG-PROV-20260303-6F2A9C";
+let mockState: Awaited<ReturnType<typeof mockApi>>;
 
 const programCatalog = {
   portability: {
@@ -104,6 +105,8 @@ const catalogPayload = {
 };
 
 async function mockApi(page: Page) {
+  const experimentEvents: Array<Record<string, unknown>> = [];
+
   await page.route(`${apiBaseUrl}/**`, async (route) => {
     const url = new URL(route.request().url());
     const pathname = url.pathname.replace(/^\/mock-api/, "");
@@ -177,6 +180,53 @@ async function mockApi(page: Page) {
       return;
     }
 
+    if (normalizedPath === "/experiments/catalog-hero/config") {
+      await route.fulfill({
+        json: {
+          experimentId: "catalog-hero-v1",
+          name: "Catalog Hero Messaging",
+          status: "active",
+          hypothesis:
+            "Audit-forward versus workflow-forward homepage messaging changes catalog engagement and downstream CTA activity.",
+          qa: {
+            overrideParam: "abVariant",
+            debugParam: "debug",
+          },
+          variants: [
+            {
+              id: "a",
+              label: "Audit-forward",
+              eyebrow: "Compliance-first launch path",
+              headline: "Audit-ready wound-care learning with measurable progression",
+              body: "Variant A copy",
+              bullets: ["Five audience tracks", "Certificate verification", "LCD workflow"],
+              stats: [
+                { value: "5", label: "audience tracks" },
+                { value: "90%", label: "lesson completion threshold" },
+              ],
+              primaryCta: { id: "catalog-primary", label: "Browse learning paths", href: "#catalog" },
+              secondaryCta: { id: "lcd-secondary", label: "Review LCD updates", href: "/lcd-updates" },
+            },
+            {
+              id: "b",
+              label: "Workflow-forward",
+              eyebrow: "Operations-first launch path",
+              headline: "Training, intake, forms, and admin follow-through in one workflow",
+              body: "Variant B copy",
+              bullets: ["Catalog to certificate", "Facility packets", "Admin troubleshooting"],
+              stats: [
+                { value: "3", label: "ops forms in platform" },
+                { value: "24/7", label: "certificate verification" },
+              ],
+              primaryCta: { id: "catalog-primary", label: "Start the catalog flow", href: "#catalog" },
+              secondaryCta: { id: "forms-secondary", label: "Open intake forms", href: "/forms" },
+            },
+          ],
+        },
+      });
+      return;
+    }
+
     if (normalizedPath === "/quiz") {
       await route.fulfill({
         json: {
@@ -195,6 +245,19 @@ async function mockApi(page: Page) {
               rationale: "Objective measurement trends support medical necessity.",
             },
           ],
+        },
+      });
+      return;
+    }
+
+    if (normalizedPath === "/experiments/events") {
+      const payload = route.request().postDataJSON() as Record<string, unknown>;
+      experimentEvents.push(payload);
+      await route.fulfill({
+        status: 202,
+        json: {
+          accepted: true,
+          eventId: `event-${experimentEvents.length}`,
         },
       });
       return;
@@ -350,15 +413,90 @@ async function mockApi(page: Page) {
       return;
     }
 
+    if (normalizedPath === "/admin/experiments/report") {
+      const variantIds = ["a", "b"];
+      const totalImpressionSessions = new Set(
+        experimentEvents
+          .filter((event) => event.eventType === "impression")
+          .map((event) => event.sessionKey as string),
+      ).size;
+      const totalClickSessions = new Set(
+        experimentEvents
+          .filter((event) => event.eventType === "cta-click")
+          .map((event) => event.sessionKey as string),
+      ).size;
+      const variants = variantIds.map((variantId) => {
+        const impressions = experimentEvents.filter(
+          (event) => event.variantId === variantId && event.eventType === "impression",
+        );
+        const clicks = experimentEvents.filter(
+          (event) => event.variantId === variantId && event.eventType === "cta-click",
+        );
+        const impressionSessions = new Set(impressions.map((event) => event.sessionKey as string)).size;
+        const clickSessions = new Set(clicks.map((event) => event.sessionKey as string)).size;
+
+        return {
+          variantId,
+          label: variantId === "a" ? "Audit-forward" : "Workflow-forward",
+          headline:
+            variantId === "a"
+              ? "Audit-ready wound-care learning with measurable progression"
+              : "Training, intake, forms, and admin follow-through in one workflow",
+          impressions: impressions.length,
+          impressionSessions,
+          clicks: clicks.length,
+          clickSessions,
+          ctr: impressionSessions > 0 ? Number(((clickSessions / impressionSessions) * 100).toFixed(1)) : 0,
+        };
+      });
+
+      await route.fulfill({
+        json: {
+          experimentId: "catalog-hero-v1",
+          name: "Catalog Hero Messaging",
+          status: "active",
+          hypothesis:
+            "Audit-forward versus workflow-forward homepage messaging changes catalog engagement and downstream CTA activity.",
+          qa: {
+            overrideParam: "abVariant",
+            debugParam: "debug",
+          },
+          variants,
+          totals: {
+            impressionSessions: totalImpressionSessions,
+            clickSessions: totalClickSessions,
+            ctr:
+              totalImpressionSessions > 0
+                ? Number(((totalClickSessions / totalImpressionSessions) * 100).toFixed(1))
+                : 0,
+          },
+          recentEvents: experimentEvents.map((event, index) => ({
+            variantId: event.variantId,
+            eventType: event.eventType,
+            sessionKey: event.sessionKey,
+            userId: null,
+            path: event.path ?? "/",
+            metadata: event.metadata ?? {},
+            createdAt: `2026-03-07T12:00:0${index}.000Z`,
+          })),
+        },
+      });
+      return;
+    }
+
     await route.fulfill({
       status: 404,
       json: { error: `Unhandled mock route: ${pathname}` },
     });
   });
+
+  return {
+    experimentEvents,
+  };
 }
 
 test.beforeEach(async ({ page }) => {
-  await mockApi(page);
+  mockState = await mockApi(page);
 });
 
 test("runs the global UI check across catalog, quiz, forms, completion, verify, LCD updates, and admin", async ({
@@ -417,4 +555,20 @@ test("runs the global UI check across catalog, quiz, forms, completion, verify, 
   await page.getByLabel("Staff email").fill("ops@advancewoundbiologic.com");
   await page.getByRole("button", { name: "Share sheet" }).click();
   await expect(page.getByLabel("Staff email")).toHaveValue("");
+});
+
+test("tracks homepage hero A/B events and exposes them in admin troubleshooting", async ({ page }) => {
+  await page.goto("/?abVariant=b&debug=1");
+  await expect(page.getByRole("heading", { name: "Training, intake, forms, and admin follow-through in one workflow" })).toBeVisible();
+  await expect(page.locator("body")).toContainText("Experiment debug");
+  await page.getByRole("link", { name: "Start the catalog flow" }).click();
+  await expect(page).toHaveURL(/#catalog$/);
+  await expect.poll(() => mockState.experimentEvents.length).toBeGreaterThanOrEqual(2);
+
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await page.getByLabel("Admin API key").fill("test-admin-key");
+  await page.getByRole("button", { name: "Load experiment report" }).click();
+  await expect(page.locator("body")).toContainText("Catalog Hero Messaging");
+  await expect(page.locator("body")).toContainText("Variant B / Workflow-forward");
+  await expect(page.locator("body")).toContainText("cta-click / variant B");
 });

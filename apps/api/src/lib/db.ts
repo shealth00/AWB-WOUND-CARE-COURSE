@@ -242,6 +242,23 @@ export async function initializeDatabase(): Promise<void> {
       requested_at timestamptz not null default now()
     );
 
+    create table if not exists experiment_events (
+      event_id text primary key,
+      experiment_id text not null,
+      variant_id text not null,
+      event_type text not null,
+      session_key text not null,
+      user_id text,
+      path text,
+      metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_experiment_events_experiment_variant_created_at
+      on experiment_events (experiment_id, variant_id, created_at desc);
+    create index if not exists idx_experiment_events_experiment_session
+      on experiment_events (experiment_id, session_key, created_at desc);
+
     alter table quiz_attempts add column if not exists track_id text;
     alter table content_lessons add column if not exists source_row_id text;
     alter table certificates add column if not exists id text;
