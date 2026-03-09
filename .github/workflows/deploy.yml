@@ -1,14 +1,12 @@
 name: QA and Deploy
 
 on:
-  workflow_dispatch: # This allows you to trigger it manually from the Actions tab
+  workflow_dispatch:
   push:
     branches:
       - main
 
 jobs:
-  # We keep QA here so you can see the errors, 
-  # but we REMOVED the link that blocks the deployment.
   qa:
     runs-on: ubuntu-latest
     steps:
@@ -26,7 +24,6 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    # This job now runs independently of QA
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Configure AWS credentials
@@ -34,20 +31,30 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1 
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Execute Deployment via SSM
+        env:
+          INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          REPO_URL: ${{ secrets.REPO_URL }}
         run: |
+          if [ -z "$INSTANCE_ID" ]; then
+            echo "Missing EC2_INSTANCE_ID secret" >&2
+            exit 1
+          fi
+          if [ -z "$REPO_URL" ]; then
+            echo "Missing REPO_URL secret" >&2
+            exit 1
+          fi
           aws ssm send-command \
-            --instance-ids "${{ secrets.INSTANCE_ID }}" \
+            --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --comment "Forcing deploy to bypass QA lock" \
-            --parameters 'commands=[
-              "cd /Volumes/SERVER\ MEM3/AWB\ WOUND\ CARE\ COURSE",
-              "sudo git fetch origin main",
-              "sudo git reset --hard origin/main",
-              "sudo npm install",
-              "sudo npm run build --if-present",
-              "sudo systemctl restart nginx",
-              "sudo nginx -t"
-            ]'
+            --comment "AWB deploy via SSM" \
+            --parameters commands="[
+              \"set -e\",
+              \"sudo mkdir -p /srv\",
+              \"if [ -d /srv/awb-academy/.git ]; then cd /srv/awb-academy && sudo git fetch --all && sudo git checkout main && sudo git reset --hard origin/main; else sudo git clone $REPO_URL /srv/awb-academy && cd /srv/awb-academy && sudo git checkout main; fi\",
+              \"cd /srv/awb-academy\",
+              \"sudo ./infra/deploy/deploy.sh\"
+            ]" \
+            --output text
