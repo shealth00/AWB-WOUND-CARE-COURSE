@@ -185,14 +185,21 @@ export function ExperimentHeroClient() {
       window.localStorage.setItem(sessionStorageKey, nextSessionKey);
     }
 
-    const allowedVariantIds = new Set(config.variants.map((variant) => variant.id));
-    const overrideCandidate = variantOverride?.toLowerCase();
+    const allowedVariantIds = new Set<"a" | "b">(config.variants.map((variant) => variant.id));
+    const normalizeVariantId = (value?: string | null): "a" | "b" | null => {
+      if (!value) {
+        return null;
+      }
+      const candidate = value.toLowerCase();
+      return candidate === "a" || candidate === "b" ? candidate : null;
+    };
+    const overrideCandidate = normalizeVariantId(variantOverride);
     const savedVariant = window.localStorage.getItem(variantStorageKey);
 
     let nextVariantId: "a" | "b";
     if (overrideCandidate && allowedVariantIds.has(overrideCandidate)) {
-      nextVariantId = overrideCandidate as "a" | "b";
-    } else if (savedVariant && allowedVariantIds.has(savedVariant)) {
+      nextVariantId = overrideCandidate;
+    } else if (savedVariant && allowedVariantIds.has(savedVariant as "a" | "b")) {
       nextVariantId = savedVariant as "a" | "b";
     } else {
       nextVariantId = config.variants[hashVariantIndex(nextSessionKey, config.variants.length)]?.id ?? "a";
