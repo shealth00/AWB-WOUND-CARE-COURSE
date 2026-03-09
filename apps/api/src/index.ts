@@ -3516,6 +3516,102 @@ app.post(["/admin/lessons/:lessonId/publish", "/api/admin/lessons/:lessonId/publ
   });
 });
 
+app.patch(
+  ["/admin/lessons/:lessonId/video-url", "/api/admin/lessons/:lessonId/video-url"],
+  requireAdmin,
+  async (req, res) => {
+    const lessonId = getRouteParam(req.params.lessonId);
+    const schema = z.object({
+      videoUrl: z.string().trim().min(1),
+      overwriteExistingVideo: z.coerce.boolean().default(false),
+      syncSmartsheet: z.coerce.boolean().default(false),
+    });
+    const parseResult = schema.safeParse(req.body);
+
+    if (!parseResult.success) {
+      res.status(400).json({ error: parseResult.error.flatten() });
+      return;
+    }
+
+    const payload = parseResult.data;
+    const admin = getAdminIdentity(req);
+
+    const [existing] = await query<{
+      lesson_id: string;
+      module_id: string;
+      source_row_id: string | null;
+    }>(
+      `
+        select lesson_id, module_id, source_row_id
+        from content_lessons
+        where lesson_id = $1
+        limit 1
+      `,
+      [lessonId],
+    );
+
+    if (!existing) {
+      res.status(404).json({ error: "Lesson not found." });
+      return;
+    }
+
+    const attachResult = await attachVideoToLessonRecord({
+      lessonId,
+      videoUrl: payload.videoUrl,
+      overwriteExistingVideo: payload.overwriteExistingVideo,
+    });
+
+    let smartsheetSynced = false;
+    let syncWarning: string | null = null;
+
+    if (payload.syncSmartsheet) {
+      const sourceRowId = attachResult.sourceRowId ?? existing.source_row_id;
+      if (!sourceRowId) {
+        syncWarning = "Lesson has no source Smartsheet row id.";
+      } else if (!isSmartsheetConfigured()) {
+        syncWarning = "Smartsheet is not configured.";
+      } else {
+        try {
+          await updateRowByColumnTitle(smartsheetIds.catalog, sourceRowId, {
+            VideoUrl: payload.videoUrl,
+          });
+          smartsheetSynced = true;
+        } catch (error) {
+          syncWarning = error instanceof Error ? error.message : "Smartsheet update failed.";
+          await recordSyncRun("admin.update-video-url", "warning", {
+            lessonId,
+            sourceRowId,
+            error: syncWarning,
+          });
+        }
+      }
+    }
+
+    await insertAuditLog({
+      actor: admin.actor,
+      role: admin.role,
+      action: "admin.update-video-url",
+      entityType: "lesson",
+      entityId: lessonId,
+      details: {
+        moduleId: existing.module_id,
+        videoUrl: payload.videoUrl,
+        overwriteExistingVideo: payload.overwriteExistingVideo,
+        smartsheetSynced,
+        syncWarning,
+      },
+    });
+
+    res.json({
+      lessonId,
+      moduleId: existing.module_id,
+      videoUrl: payload.videoUrl,
+      smartsheetSynced,
+      syncWarning,
+    });
+  },
+);
+
 app.get(["/admin/diagnostics", "/api/admin/diagnostics"], requireAdmin, async (_req, res) => {
   const [latestSync] = await query<{ created_at: string; status: string; source: string }>(
     `select created_at, status, source from sync_runs order by created_at desc limit 1`,
