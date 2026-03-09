@@ -1,21 +1,24 @@
-# SallyHealth Forms
+# Platform Rollout Blueprint
 
-`SallyHealth Forms` is a no-dependency frontend prototype for a Jotform-style healthcare workflow suite.
+`Platform Rollout Blueprint` is a no-dependency frontend prototype that turns the 69-row `platform_screen_inventory.csv` into a route-by-route design workspace.
 
-## Included modules
+## What it includes
 
-- Drag-and-drop form builder with templates, multi-page forms, field editor, live preview, publish state, and local persistence
-- Submission tables with search, status updates, and queue summaries
-- Workflow/approval board with automation rules
-- E-sign document center with audit trail
-- Report dashboard with live metrics
-- Mobile app builder concepts for staff and patient experiences
-- Integration hub for storage, CRM, messaging, analytics, and payments
-- Healthcare security and compliance controls
+- Full coverage of all 69 screens in the inventory
+- Module and feature filtering across Platform, Identity, Forms, Payments, Workflows, Sign, Tables, Inbox, Reports, Store, Automation, Interfaces, and AI
+- Shared API, DB object, and permission dependency tracing between routes
+- Screen-spec copy/export actions plus full inventory JSON export
+- Per-screen implementation checklist with persisted progress
+- Portfolio rollout phase planning across operations, foundation, and AI delivery waves
+- Portfolio progress dashboard with module and phase completion rollups
+- Progress snapshot export for handoff or status reporting
+- Route-level detail for module, feature, screen, route, purpose, components, primary actions, empty state, error state, permissions, APIs, DB objects, and acceptance criteria
+- Hash-based route selection so each inventory row is directly addressable in the browser
+- Responsive inventory, blueprint, state, contract, and acceptance views
 
 ## Run locally
 
-Open [index.html](/Volumes/SERVER MEM3/AWB WOUND CARE COURSE/files 3:5/JOTFORM ROLEOUT/index.html) directly in a browser, or serve the folder:
+Open [index.html](/Users/izzy/.codex/worktrees/4914/AWB%20WOUND%20CARE%20COURSE/files%203:5/JOTFORM%20ROLEOUT/index.html) directly in a browser, or serve the folder:
 
 ```bash
 python3 -m http.server 4173
@@ -23,13 +26,10 @@ python3 -m http.server 4173
 
 Then open `http://localhost:4173`.
 
-## Scope note
+## Data source
 
-This is a frontend product prototype, not a full Jotform replacement. Real parity would require:
+The runtime dataset in `screen-data.js` is derived from:
 
-- Authentication, accounts, organizations, and billing
-- Persistent backend data model and APIs
-- Real drag-and-drop workflow builder persistence
-- Secure file upload storage, PDF generation, and signature workflows
-- Payment processor integrations
-- HIPAA/BAA operational controls, audit exports, encryption architecture, and compliance review
+- `/Volumes/SERVER MEM3/JOTFORM ROLEOUT/platform_screen_inventory.csv`
+
+The prototype is static and self-contained once `screen-data.js` is present.

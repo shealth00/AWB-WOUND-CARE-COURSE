@@ -3,439 +3,249 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SallyHealth Forms</title>
+  <title>Platform Rollout Blueprint</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="shell">
+  <div class="page-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">S</div>
+        <div class="brand-mark">69</div>
         <div>
-          <p class="eyebrow">SallyHealth</p>
-          <h1>Forms</h1>
+          <p class="eyebrow">Platform Rollout</p>
+          <h1>Screen Inventory</h1>
         </div>
       </div>
 
-      <nav class="nav">
-        <button class="nav-link is-active" data-panel="overview">Overview</button>
-        <button class="nav-link" data-panel="builder">Builder</button>
-        <button class="nav-link" data-panel="submissions">Tables</button>
-        <button class="nav-link" data-panel="workflows">Workflows</button>
-        <button class="nav-link" data-panel="sign">Sign</button>
-        <button class="nav-link" data-panel="reports">Reports</button>
-        <button class="nav-link" data-panel="apps">Apps</button>
-        <button class="nav-link" data-panel="integrations">Integrations</button>
-        <button class="nav-link" data-panel="security">Security</button>
-      </nav>
+      <p class="sidebar-copy">
+        Source-aligned workspace for a 69-screen platform plan. Every route, state, contract, and acceptance rule is reviewable from one shell.
+      </p>
 
-      <section class="sidebar-card">
-        <p class="sidebar-label">Compliance posture</p>
-        <div class="pill-row">
-          <span class="pill">HIPAA-ready</span>
-          <span class="pill">Audit log</span>
-          <span class="pill">RBAC</span>
+      <div id="sidebar-stats" class="sidebar-stats"></div>
+
+      <section class="sidebar-section">
+        <div class="section-header compact">
+          <div>
+            <p class="eyebrow">Modules</p>
+            <h2>Coverage</h2>
+          </div>
+          <button id="clear-module" class="ghost-chip" type="button">All Modules</button>
         </div>
-        <p class="sidebar-copy">Built for intake, consents, referrals, wound photos, payments, and approvals.</p>
+        <div id="module-filter" class="module-filter"></div>
+      </section>
+
+      <section class="sidebar-section">
+        <div class="section-header compact">
+          <div>
+            <p class="eyebrow">Feature Flow</p>
+            <h2>Selected Trail</h2>
+          </div>
+        </div>
+        <div id="journey-rail" class="journey-rail"></div>
+      </section>
+
+      <section class="sidebar-section source-note">
+        <p class="eyebrow">Source</p>
+        <p class="sidebar-copy">
+          Derived from <span class="mono-copy">platform_screen_inventory.csv</span> and normalized into a browser-native rollout prototype.
+        </p>
       </section>
     </aside>
 
     <main class="workspace">
       <header class="topbar">
         <div>
-          <p class="eyebrow">No-code healthcare operations suite</p>
-          <h2 id="panel-title">Overview</h2>
+          <p class="eyebrow">69 Screen-Level Specifications</p>
+          <h2 id="view-title">Route Blueprint</h2>
         </div>
         <div class="topbar-actions">
-          <button id="save-all" class="ghost-button">Save Workspace</button>
-          <button id="publish-form" class="primary-button">Publish Form</button>
+          <button id="export-inventory" class="ghost-button" type="button">Export Inventory</button>
+          <button id="random-screen" class="ghost-button" type="button">Random Screen</button>
+          <button id="next-screen" class="primary-button" type="button">Next Route</button>
         </div>
       </header>
 
-      <section class="panel is-active" id="overview">
-        <div class="hero">
-          <div class="hero-copy">
-            <p class="eyebrow">SALLYHEALTH FORMS</p>
-            <h3>Design intake, approvals, signatures, reports, and mobile workflows in one workspace.</h3>
-            <p>Jotform-style product coverage, adapted for healthcare teams that need secure intake, consent, billing, and care coordination.</p>
-            <div class="hero-actions">
-              <button class="primary-button nav-shortcut" data-target="builder">Open Builder</button>
-              <button class="ghost-button nav-shortcut" data-target="security">Review Security</button>
-            </div>
+      <section class="controls card">
+        <label class="control-field">
+          <span>Search</span>
+          <input id="screen-search" type="search" placeholder="Module, route, API, DB object, acceptance criteria">
+        </label>
+        <label class="control-field">
+          <span>Feature</span>
+          <select id="feature-filter"></select>
+        </label>
+        <label class="control-field">
+          <span>Sort</span>
+          <select id="sort-order">
+            <option value="index">Inventory Order</option>
+            <option value="screen">Screen Name</option>
+            <option value="route">Route</option>
+            <option value="dependencies">Dependencies</option>
+          </select>
+        </label>
+        <div class="control-field route-field">
+          <span>Route</span>
+          <div id="route-readout" class="route-readout"></div>
+        </div>
+      </section>
+
+      <section class="hero-grid">
+        <article class="card hero-card">
+          <div class="hero-copy-block">
+            <p id="screen-kicker" class="eyebrow"></p>
+            <h3 id="screen-title"></h3>
+            <p id="screen-purpose" class="hero-purpose"></p>
           </div>
-          <div class="hero-grid">
-            <article class="metric-card accent-coral">
-              <span>Active forms</span>
-              <strong id="metric-forms">1</strong>
-              <small>Template, publish, embed, and share</small>
-            </article>
-            <article class="metric-card accent-gold">
-              <span>Workflow runs</span>
-              <strong id="metric-runs">128</strong>
-              <small>Approvals, routing, reminders, and handoffs</small>
-            </article>
-            <article class="metric-card accent-teal">
-              <span>Submissions</span>
-              <strong id="metric-submissions">86</strong>
-              <small>Table, card, and report views</small>
-            </article>
-            <article class="metric-card accent-ink">
-              <span>Connected apps</span>
-              <strong id="metric-integrations">6</strong>
-              <small>Storage, CRM, messaging, and payments</small>
-            </article>
+          <div id="screen-metrics" class="hero-metrics"></div>
+          <div id="meta-pills" class="meta-pills"></div>
+          <div class="hero-actions-block">
+            <p class="eyebrow">Primary Actions</p>
+            <div id="primary-actions" class="action-row"></div>
           </div>
-        </div>
+        </article>
 
-        <div class="feature-ribbon">
-          <span>Drag-and-drop builder</span>
-          <span>Conditional logic</span>
-          <span>Templates</span>
-          <span>Payments</span>
-          <span>E-signature</span>
-          <span>Tables</span>
-          <span>Reports</span>
-          <span>Apps</span>
-          <span>HIPAA controls</span>
-        </div>
-
-        <div class="overview-grid">
-          <article class="module-card">
-            <p class="module-kicker">Builder</p>
-            <h4>Classic and card layouts</h4>
-            <p>Create multi-page forms, add conditional branches, save drafts, and publish branded experiences.</p>
-          </article>
-          <article class="module-card">
-            <p class="module-kicker">Workflows</p>
-            <h4>Approval chains and automations</h4>
-            <p>Assign reviews, route urgent cases, trigger reminders, and track each stage from one board.</p>
-          </article>
-          <article class="module-card">
-            <p class="module-kicker">Tables</p>
-            <h4>Spreadsheet, cards, and queue views</h4>
-            <p>Search submissions, update statuses, filter by owner, and convert records into operational queues.</p>
-          </article>
-          <article class="module-card">
-            <p class="module-kicker">Sign</p>
-            <h4>Consent packets and audit trail</h4>
-            <p>Send signature requests, watch signer status, and manage reminders from a document center.</p>
-          </article>
-          <article class="module-card">
-            <p class="module-kicker">Apps</p>
-            <h4>Mobile portals for staff and patients</h4>
-            <p>Bundle forms, reports, tables, and resources into a branded app experience with offline-friendly workflows.</p>
-          </article>
-          <article class="module-card">
-            <p class="module-kicker">Security</p>
-            <h4>Healthcare-first governance</h4>
-            <p>Role-based access, PHI handling, encryption notes, audit logs, retention controls, and BAA workflow prompts.</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="panel" id="builder">
-        <div class="builder-toolbar card">
-          <div class="toolbar-group">
-            <label class="stack-field">
-              <span>Form title</span>
-              <input id="form-title" type="text" placeholder="Patient Intake">
-            </label>
-            <label class="stack-field">
-              <span>Layout</span>
-              <select id="form-layout">
-                <option value="classic">Classic</option>
-                <option value="card">Card</option>
-              </select>
-            </label>
-            <label class="stack-field">
-              <span>Theme accent</span>
-              <input id="theme-accent" type="color" value="#ff7a59">
-            </label>
-          </div>
-          <div class="toolbar-group">
-            <button id="new-page" class="ghost-button">Add Page</button>
-            <button id="load-template" class="ghost-button">Load Template</button>
-            <button id="reset-form" class="ghost-button danger-button">Reset</button>
-          </div>
-        </div>
-
-        <div class="builder-layout">
-          <section class="card palette">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Field palette</p>
-                <h4>Drag onto the canvas</h4>
-              </div>
-              <p class="small-copy">Supports intake, files, payments, and signatures.</p>
-            </div>
-            <div id="field-palette" class="palette-grid"></div>
-          </section>
-
-          <section class="card canvas-card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Form canvas</p>
-                <h4 id="canvas-title">Home Health Wound Referral</h4>
-              </div>
-              <div id="page-tabs" class="chip-row"></div>
-            </div>
-            <div id="template-bar" class="template-bar"></div>
-            <div id="canvas" class="canvas" aria-live="polite"></div>
-          </section>
-
-          <section class="card inspector">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Inspector</p>
-                <h4>Field and form settings</h4>
-              </div>
-            </div>
-            <div id="inspector" class="inspector-body"></div>
-          </section>
-        </div>
-
-        <div class="preview-layout">
-          <section class="card preview-card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Live preview</p>
-                <h4>Published experience</h4>
-              </div>
-              <small id="preview-status" class="status-badge">Draft</small>
-            </div>
-            <form id="preview-form" class="preview-form"></form>
-          </section>
-
-          <section class="card publish-card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Distribution</p>
-                <h4>Publish, embed, and share</h4>
-              </div>
-            </div>
-            <div class="publish-grid">
-              <article>
-                <span class="label">Share link</span>
-                <p id="share-link" class="mono-copy">sallyhealthforms.app/forms/intake-draft</p>
-              </article>
-              <article>
-                <span class="label">Embed snippet</span>
-                <pre id="embed-code" class="code-box"></pre>
-              </article>
-              <article>
-                <span class="label">Capabilities</span>
-                <div id="capability-pills" class="pill-row"></div>
-              </article>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <section class="panel" id="submissions">
-        <div class="section-grid">
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Submission tables</p>
-                <h4>Searchable intake records</h4>
-              </div>
-            </div>
-            <div class="table-controls">
-              <input id="submission-search" type="search" placeholder="Search patient, owner, or status">
-              <select id="submission-filter">
-                <option value="all">All statuses</option>
-                <option value="new">New</option>
-                <option value="review">In review</option>
-                <option value="approved">Approved</option>
-                <option value="complete">Complete</option>
-              </select>
-            </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Record</th>
-                    <th>Status</th>
-                    <th>Owner</th>
-                    <th>Stage</th>
-                    <th>Payment</th>
-                    <th>Updated</th>
-                  </tr>
-                </thead>
-                <tbody id="submissions-body"></tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Queue views</p>
-                <h4>Operational snapshots</h4>
-              </div>
-            </div>
-            <div id="queue-cards" class="queue-grid"></div>
-          </section>
-        </div>
-      </section>
-
-      <section class="panel" id="workflows">
-        <div class="section-grid">
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Workflow builder</p>
-                <h4>Approval path</h4>
-              </div>
-            </div>
-            <div id="workflow-stages" class="workflow-stages"></div>
-          </section>
-
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Automations</p>
-                <h4>Rules and reminders</h4>
-              </div>
-            </div>
-            <div id="automation-list" class="list-stack"></div>
-          </section>
-        </div>
-      </section>
-
-      <section class="panel" id="sign">
-        <div class="section-grid">
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Document center</p>
-                <h4>Packets waiting for signatures</h4>
-              </div>
-            </div>
-            <div id="sign-documents" class="document-grid"></div>
-          </section>
-
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Audit trail</p>
-                <h4>Recent signer events</h4>
-              </div>
-            </div>
-            <div id="audit-log" class="list-stack"></div>
-          </section>
-        </div>
-      </section>
-
-      <section class="panel" id="reports">
-        <div class="section-grid">
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Live reporting</p>
-                <h4>Operational analytics</h4>
-              </div>
-            </div>
-            <div id="report-metrics" class="report-metrics"></div>
-            <div id="report-chart" class="chart-bars"></div>
-          </section>
-
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Insights</p>
-                <h4>Performance notes</h4>
-              </div>
-            </div>
-            <div id="insight-list" class="list-stack"></div>
-          </section>
-        </div>
-      </section>
-
-      <section class="panel" id="apps">
-        <div class="section-grid">
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">App builder</p>
-                <h4>Mobile-ready workspace</h4>
-              </div>
-            </div>
-            <div id="app-surfaces" class="app-grid"></div>
-          </section>
-
-          <section class="card mobile-card">
-            <div class="phone-shell">
-              <div class="phone-header">
-                <span></span><span></span><span></span>
-              </div>
-              <div class="phone-screen">
-                <p class="eyebrow">Staff portal</p>
-                <h4>Wound Rounds</h4>
-                <div class="phone-list">
-                  <article>
-                    <strong>Photo upload</strong>
-                    <span>Offline-ready capture</span>
-                  </article>
-                  <article>
-                    <strong>Visit checklist</strong>
-                    <span>Conditional prompts</span>
-                  </article>
-                  <article>
-                    <strong>Consent packet</strong>
-                    <span>Built-in signatures</span>
-                  </article>
-                  <article>
-                    <strong>Billing intake</strong>
-                    <span>Copay and invoices</span>
-                  </article>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      </section>
-
-      <section class="panel" id="integrations">
-        <section class="card">
+        <article class="card coverage-card">
           <div class="card-heading">
             <div>
-              <p class="eyebrow">Integration hub</p>
-              <h4>Storage, messaging, CRM, and payments</h4>
+              <p class="eyebrow">Coverage</p>
+              <h3>Inventory Health</h3>
             </div>
-            <input id="integration-search" type="search" placeholder="Search integrations">
+            <p class="card-subcopy">Track visible scope, selected module depth, and total surface area.</p>
           </div>
-          <div id="integration-grid" class="integration-grid"></div>
-        </section>
+          <div id="coverage-grid" class="coverage-grid"></div>
+        </article>
       </section>
 
-      <section class="panel" id="security">
-        <div class="section-grid">
-          <section class="card">
-            <div class="card-heading">
-              <div>
-                <p class="eyebrow">Governance</p>
-                <h4>Healthcare security controls</h4>
-              </div>
+      <section class="workspace-grid">
+        <aside class="card catalog">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow">Catalog</p>
+              <h3 id="catalog-count">Route Catalog</h3>
             </div>
-            <div id="security-controls" class="security-grid"></div>
-          </section>
+            <button id="clear-filters" class="ghost-button small-button" type="button">Reset</button>
+          </div>
+          <div id="route-catalog" class="route-catalog"></div>
+        </aside>
 
-          <section class="card">
+        <div class="detail-stack">
+          <article class="card detail-card">
             <div class="card-heading">
               <div>
-                <p class="eyebrow">Activity log</p>
-                <h4>Recent admin events</h4>
+                <p class="eyebrow">Blueprint</p>
+                <h3>Module, Feature, Screen, Route</h3>
+              </div>
+              <p class="card-subcopy">Turn each row into a route-level artifact with structural components and action scaffolding.</p>
+            </div>
+
+            <div id="module-feature-grid" class="meta-grid"></div>
+            <div id="wireframe-stage" class="wireframe-stage"></div>
+            <div id="component-grid" class="component-grid"></div>
+          </article>
+
+          <article class="card state-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">States</p>
+                <h3>Empty + Error State Design</h3>
               </div>
             </div>
-            <div id="security-log" class="list-stack"></div>
-          </section>
+            <div id="state-grid" class="state-grid"></div>
+          </article>
+
+          <article class="card contract-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Contracts</p>
+                <h3>Permissions, APIs, and DB Objects</h3>
+              </div>
+            </div>
+            <div id="contract-grid" class="contract-grid"></div>
+          </article>
+
+          <article class="card dependency-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Dependencies</p>
+                <h3>Shared APIs, Data, and Access</h3>
+              </div>
+              <div class="card-actions">
+                <button id="copy-screen-spec" class="ghost-button small-button" type="button">Copy Spec</button>
+                <button id="download-screen" class="ghost-button small-button" type="button">Screen JSON</button>
+              </div>
+            </div>
+            <div id="dependency-grid" class="dependency-grid"></div>
+          </article>
+
+          <article class="card execution-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Execution</p>
+                <h3>Implementation Checklist</h3>
+              </div>
+              <div class="card-actions">
+                <button id="reset-screen-checklist" class="ghost-button small-button" type="button">Reset Checklist</button>
+              </div>
+            </div>
+            <div id="execution-summary" class="execution-summary"></div>
+            <div id="implementation-list" class="implementation-list"></div>
+          </article>
+
+          <article class="card acceptance-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Acceptance</p>
+                <h3>Definition of Done</h3>
+              </div>
+            </div>
+            <ol id="acceptance-list" class="acceptance-list"></ol>
+          </article>
         </div>
+      </section>
+
+      <section class="card module-board">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">End-to-End Coverage</p>
+            <h3>Module Board</h3>
+          </div>
+          <p class="card-subcopy">Every module, feature cluster, and route sample visible at a glance.</p>
+        </div>
+        <div id="module-board" class="module-board-grid"></div>
+      </section>
+
+      <section class="card delivery-dashboard">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">Delivery Status</p>
+            <h3>Portfolio Progress</h3>
+          </div>
+          <div class="card-actions">
+            <button id="export-progress" class="ghost-button small-button" type="button">Export Progress</button>
+          </div>
+        </div>
+        <div id="portfolio-summary" class="portfolio-summary"></div>
+        <div id="phase-progress" class="phase-progress-grid"></div>
+        <div id="module-progress" class="module-progress-grid"></div>
+      </section>
+
+      <section class="card rollout-plan">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">Rollout Sequence</p>
+            <h3>Phase Plan</h3>
+          </div>
+          <p class="card-subcopy">Recommended order for platform delivery based on foundational dependencies and module weight.</p>
+        </div>
+        <div id="phase-board" class="phase-board"></div>
       </section>
     </main>
   </div>
 
+  <div id="status-toast" class="status-toast" aria-live="polite"></div>
+
+  <script src="screen-data.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
