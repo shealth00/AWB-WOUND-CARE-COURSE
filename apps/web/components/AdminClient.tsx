@@ -214,6 +214,9 @@ export function AdminClient() {
   const [publishAfterGenerate, setPublishAfterGenerate] = useState(true);
   const [overwriteExistingVideo, setOverwriteExistingVideo] = useState(false);
   const [videoPayloadJson, setVideoPayloadJson] = useState(buildCanonicalPayload());
+  const [lessonVideoTargetId, setLessonVideoTargetId] = useState("");
+  const [lessonVideoFile, setLessonVideoFile] = useState<File | null>(null);
+  const [lessonVideoBusy, setLessonVideoBusy] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -480,6 +483,100 @@ export function AdminClient() {
       setError(message);
     } finally {
       setGenerateBusy(false);
+    }
+  }
+
+  async function uploadLessonVideo(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+
+    if (!isAuthenticated) {
+      setError("Admin authentication is required to upload lesson videos.");
+      return;
+    }
+    if (!lessonVideoTargetId) {
+      setError("Select a lesson before uploading a video.");
+      return;
+    }
+    if (!lessonVideoFile) {
+      setError("Select a video file to upload.");
+      return;
+    }
+
+    setLessonVideoBusy(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", lessonVideoFile);
+      formData.append("title", `Lesson ${lessonVideoTargetId} video`);
+
+      const uploadResponse = await fetch(apiUrl("/admin/assets/upload"), {
+        method: "POST",
+        headers: adminAuthHeaders(),
+        body: formData,
+      });
+
+      const uploadPayload = (await uploadResponse.json()) as { assetId?: string; error?: string };
+      if (!uploadResponse.ok || !uploadPayload.assetId) {
+        throw new Error(uploadPayload.error ?? "Video upload failed.");
+      }
+
+      const videoUrl = apiUrl(`/assets/${encodeURIComponent(uploadPayload.assetId)}/content`);
+
+      const attachResponse = await fetch(
+        apiUrl(`/admin/lessons/${encodeURIComponent(lessonVideoTargetId)}/video-url`),
+        {
+          method: "PATCH",
+          headers: adminHeaders(),
+          body: JSON.stringify({
+            videoUrl,
+            overwriteExistingVideo: true,
+            syncSmartsheet: true,
+          }),
+        },
+      );
+
+      const attachPayload = (await attachResponse.json()) as { error?: string };
+      if (!attachResponse.ok) {
+        throw new Error(attachPayload.error ?? "Failed to attach video to lesson.");
+      }
+
+      setNotice(`Uploaded and attached video to lesson ${lessonVideoTargetId}.`);
+      setLessonVideoFile(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Lesson video upload failed.");
+    } finally {
+      setLessonVideoBusy(false);
+    }
+  }
+
+  async function clearLessonVideo(lessonId: string) {
+    setError(null);
+    setNotice(null);
+
+    if (!isAuthenticated) {
+      setError("Admin authentication is required to delete lesson videos.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Remove the published video URL for lesson ${lessonId}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(apiUrl(`/admin/lessons/${encodeURIComponent(lessonId)}/video-url`), {
+        method: "DELETE",
+        headers: adminAuthHeaders(),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to clear lesson video URL.");
+      }
+      setNotice(`Cleared video URL for lesson ${lessonId}.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to clear lesson video URL.");
     }
   }
 
@@ -1025,10 +1122,46 @@ export function AdminClient() {
                     >
                       Use in generator
                     </button>
+                    <button
+                      className="button secondary"
+                      disabled={!isAuthenticated}
+                      onClick={() => void clearLessonVideo(lesson.lesson_id)}
+                      type="button"
+                    >
+                      Remove video
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
+          </section>
+          <section className="card">
+            <h2>Upload lesson video</h2>
+            <p className="muted">Upload an MP4 and attach it to a published lesson.</p>
+            <form className="stack" onSubmit={uploadLessonVideo}>
+              <label className="field">
+                Target lesson
+                <select onChange={(event) => setLessonVideoTargetId(event.target.value)} value={lessonVideoTargetId}>
+                  <option value="">Select lesson</option>
+                  {catalogLessons.slice(0, 200).map((lesson) => (
+                    <option key={lesson.lesson_id} value={lesson.lesson_id}>
+                      {lesson.lesson_id} / {lesson.lesson_title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                Video file (MP4)
+                <input
+                  accept="video/mp4"
+                  onChange={(event) => setLessonVideoFile(event.target.files?.[0] ?? null)}
+                  type="file"
+                />
+              </label>
+              <button className="button" disabled={!isAuthenticated || lessonVideoBusy} type="submit">
+                {lessonVideoBusy ? "Uploading..." : "Upload and attach"}
+              </button>
+            </form>
           </section>
           <section className="card">
             <h2>Lesson video generator</h2>

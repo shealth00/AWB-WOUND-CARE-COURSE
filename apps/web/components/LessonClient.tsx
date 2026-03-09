@@ -53,6 +53,13 @@ export function LessonClient() {
   const [lesson, setLesson] = useState<LessonResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
+  const [memberId, setMemberId] = useState<string>("");
+
+  useEffect(() => {
+    void fetchJson<{ member: { memberId: string } }>("/auth/me")
+      .then((payload) => setMemberId(payload.member.memberId))
+      .catch(() => setMemberId(""));
+  }, []);
 
   useEffect(() => {
     if (!params.lessonId) {
@@ -78,6 +85,10 @@ export function LessonClient() {
     if (!lesson) {
       return;
     }
+    if (!memberId) {
+      setProgress("Please sign in before tracking lesson progress.");
+      return;
+    }
 
     const trackId = resolveTrackId(lesson.track);
 
@@ -88,7 +99,7 @@ export function LessonClient() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: "demo-user",
+          userId: memberId,
           trackId,
           lessonId: lesson.lesson_id,
           watchedSeconds: (lesson.duration_min ?? 10) * 60,
@@ -118,6 +129,8 @@ export function LessonClient() {
               mimeType="video/mp4"
               src={lesson.video_url}
               title={lesson.lesson_title}
+              storageKey={lesson.lesson_id}
+              resumeWindowDays={30}
             />
             <div className="actions" style={{ marginTop: 12 }}>
               <a className="button secondary" href={lesson.video_url} target="_blank" rel="noreferrer">
@@ -125,7 +138,9 @@ export function LessonClient() {
               </a>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="card status-warn">No lesson video has been uploaded yet.</div>
+        )}
       </section>
       <section className="split">
         <div className="card">
@@ -143,12 +158,12 @@ export function LessonClient() {
           <div className="stack">
             {lesson.downloads.length > 0 ? (
               lesson.downloads.map((download) => (
-                <a key={download} href={download} target="_blank" rel="noreferrer">
-                  {download}
+                <a className="button secondary" key={download} href={download} target="_blank" rel="noreferrer">
+                  Open lesson PDF
                 </a>
               ))
             ) : (
-              <div className="muted">No downloads published.</div>
+              <div className="muted">No lesson PDFs were attached.</div>
             )}
           </div>
         </div>

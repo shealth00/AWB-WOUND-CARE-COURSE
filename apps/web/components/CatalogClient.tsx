@@ -100,12 +100,29 @@ export function CatalogClient() {
   const [data, setData] = useState<CatalogResponse | null>(null);
   const [program, setProgram] = useState<ProgramCatalogResponse | null>(null);
   const [selectedTrack, setSelectedTrack] = useState("");
-  const [userId, setUserId] = useState("demo-user");
+  const [userId, setUserId] = useState("");
+  const [memberLoaded, setMemberLoaded] = useState(false);
   const [progress, setProgress] = useState<TrackProgressResponse | null>(null);
   const [progressError, setProgressError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    void fetchJson<{ member: { memberId: string } }>("/auth/me")
+      .then((payload) => {
+        setUserId(payload.member.memberId);
+      })
+      .catch(() => {
+        setUserId("");
+      })
+      .finally(() => {
+        setMemberLoaded(true);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!memberLoaded || !userId) {
+      return;
+    }
     void Promise.all([
       fetchJson<CatalogResponse>("/catalog"),
       fetchJson<ProgramCatalogResponse>("/program/catalog"),
@@ -118,7 +135,7 @@ export function CatalogClient() {
       .catch((reason: unknown) =>
         setError(reason instanceof Error ? reason.message : "API request failed while loading catalog."),
       );
-  }, []);
+  }, [memberLoaded, userId]);
 
   useEffect(() => {
     if (!selectedTrack || !userId) {
@@ -141,6 +158,29 @@ export function CatalogClient() {
 
   if (error) {
     return <div className="card status-bad">{error}</div>;
+  }
+
+  if (!memberLoaded) {
+    return <div className="card">Loading member access...</div>;
+  }
+
+  if (!userId) {
+    return (
+      <div className="card status-warn">
+        <strong>Member login required</strong>
+        <div className="muted" style={{ marginTop: 6 }}>
+          Please sign in or create an account to view the training catalog.
+        </div>
+        <div className="actions" style={{ marginTop: 12 }}>
+          <a className="button" href="/login">
+            Sign in
+          </a>
+          <a className="button secondary" href="/register">
+            Create account
+          </a>
+        </div>
+      </div>
+    );
   }
 
   if (!data || !program) {

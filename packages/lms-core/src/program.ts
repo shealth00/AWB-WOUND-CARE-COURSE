@@ -143,7 +143,7 @@ export const PROGRAM_TRACKS: ProgramTrack[] = [
     id: "providers",
     code: "PROV",
     title: "Provider Track",
-    catalogName: "Provider Track (Clinical + Documentation + Audit-Ready)",
+    catalogName: "Provider",
     certificateTitle: AWB_BRAND.masterProgramTitle,
     estimatedHours: "6-8 hours",
     outcomes: [
@@ -161,7 +161,7 @@ export const PROGRAM_TRACKS: ProgramTrack[] = [
     id: "sales-marketers",
     code: "SALES",
     title: "Sales & Marketing Track",
-    catalogName: "Sales & Marketing Track (Access + Evidence + Compliance)",
+    catalogName: "Sales & Marketing",
     certificateTitle: AWB_BRAND.masterProgramTitle,
     estimatedHours: "3-4 hours",
     outcomes: [
@@ -179,7 +179,7 @@ export const PROGRAM_TRACKS: ProgramTrack[] = [
     id: "distributors",
     code: "DIST",
     title: "Distributor Track",
-    catalogName: "Distributor Track (Operations + Traceability + Compliant Support)",
+    catalogName: "Distributor",
     certificateTitle: AWB_BRAND.masterProgramTitle,
     estimatedHours: "2.5-3.5 hours",
     outcomes: [
@@ -196,7 +196,7 @@ export const PROGRAM_TRACKS: ProgramTrack[] = [
     id: "post-acute-senior-care",
     code: "FAC",
     title: "Post-Acute & Senior Care Track",
-    catalogName: "Post-Acute & Senior Care Track (SNF/NH/ALF/Adult Senior Care)",
+    catalogName: "Post-Acute & Senior Care",
     certificateTitle: "Post-Acute Wound Care & Skin Grafting Operations",
     estimatedHours: "4-6 hours",
     outcomes: [
@@ -214,7 +214,7 @@ export const PROGRAM_TRACKS: ProgramTrack[] = [
     id: "asc-ortho",
     code: "ASC",
     title: "ASC / Ortho Track",
-    catalogName: "ASC / Ortho Track (Operations + Grafting + Audit-Ready)",
+    catalogName: "ASC / Ortho",
     certificateTitle: "Surgical Wounds, Skin Grafting & Biologic Adjuncts (ASC/Ortho)",
     estimatedHours: "4-6 hours",
     outcomes: [

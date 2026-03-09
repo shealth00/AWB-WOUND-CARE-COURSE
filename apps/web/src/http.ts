@@ -1,4 +1,5 @@
 import { apiUrl } from "./api";
+import { getMemberToken } from "./memberAuth";
 
 function normalizeDetail(payload: unknown): string | null {
   if (payload && typeof payload === "object") {
@@ -19,10 +20,17 @@ function normalizeDetail(payload: unknown): string | null {
 
 export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const endpoint = apiUrl(path);
+  const headers = new Headers(init?.headers ?? {});
+  if (!headers.has("Authorization")) {
+    const token = getMemberToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  }
   let response: Response;
 
   try {
-    response = await fetch(endpoint, init);
+    response = await fetch(endpoint, { ...init, headers });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Network request failed";
     throw new Error(`API request failed at ${endpoint}: ${detail}`);

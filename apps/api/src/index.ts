@@ -1295,7 +1295,7 @@ app.post(["/experiments/events", "/api/experiments/events"], async (req, res) =>
   });
 });
 
-app.get(["/catalog", "/api/catalog"], async (req, res) => {
+app.get(["/catalog", "/api/catalog"], requireMember, async (req, res) => {
   const track = typeof req.query.track === "string" ? req.query.track : undefined;
   const [tracks, lessons] = await Promise.all([listTracks(), listLessonsByTrack(track)]);
 
@@ -1305,7 +1305,7 @@ app.get(["/catalog", "/api/catalog"], async (req, res) => {
   });
 });
 
-app.get(["/progress/path", "/api/progress/path"], async (req, res) => {
+app.get(["/progress/path", "/api/progress/path"], requireMember, async (req, res) => {
   const schema = z.object({
     userId: z.string().min(1),
     track: z.string().min(1),
@@ -1328,7 +1328,7 @@ app.get(["/progress/path", "/api/progress/path"], async (req, res) => {
   res.json(await buildTrackPathProgress(payload.userId, payload.track, trackMeta));
 });
 
-app.get(["/lessons/:lessonId", "/api/lessons/:lessonId"], async (req, res) => {
+app.get(["/lessons/:lessonId", "/api/lessons/:lessonId"], requireMember, async (req, res) => {
   const lesson = await getLesson(getRouteParam(req.params.lessonId));
 
   if (!lesson) {
@@ -1357,7 +1357,7 @@ app.get(["/completion/:userId", "/api/completion/:userId"], async (req, res) => 
   });
 });
 
-app.post(["/progress/lessons", "/api/progress/lessons"], async (req, res) => {
+app.post(["/progress/lessons", "/api/progress/lessons"], requireMember, async (req, res) => {
   const schema = z.object({
     userId: z.string().min(1),
     trackId: z.string().min(1),
@@ -2684,8 +2684,30 @@ app.post(["/auth/register", "/api/auth/register"], async (req, res) => {
       [memberId, email, passwordHash, payload.firstName ?? null, payload.lastName ?? null],
     );
 
+    const token = issueMemberToken({
+      memberId: member.member_id,
+      role: member.role,
+      membershipStatus: member.membership_status,
+    });
+
+    await query(
+      `
+        insert into member_sessions (session_id, member_id, token_hash, ip_address, user_agent)
+        values ($1, $2, $3, $4, $5)
+      `,
+      [
+        randomUUID(),
+        member.member_id,
+        hashTokenFingerprint(token),
+        req.ip ?? null,
+        req.get("user-agent") ?? null,
+      ],
+    );
+
     res.status(201).json({
       registered: true,
+      token,
+      expiresInSec: apiEnv.MEMBER_SESSION_TTL_SEC,
       member: {
         memberId: member.member_id,
         email: member.email,
@@ -3609,6 +3631,56 @@ app.patch(
       smartsheetSynced,
       syncWarning,
     });
+  },
+);
+
+app.delete(
+  ["/admin/lessons/:lessonId/video-url", "/api/admin/lessons/:lessonId/video-url"],
+  requireAdmin,
+  async (req, res) => {
+    const lessonId = getRouteParam(req.params.lessonId);
+    const admin = getAdminIdentity(req);
+
+    const [existing] = await query<{
+      lesson_id: string;
+      module_id: string;
+      source_row_id: string | null;
+    }>(
+      `
+        select lesson_id, module_id, source_row_id
+        from content_lessons
+        where lesson_id = $1
+        limit 1
+      `,
+      [lessonId],
+    );
+
+    if (!existing) {
+      res.status(404).json({ error: "Lesson not found." });
+      return;
+    }
+
+    await query(
+      `
+        update content_lessons
+        set video_url = null, updated_at = now()
+        where lesson_id = $1
+      `,
+      [lessonId],
+    );
+
+    await insertAuditLog({
+      actor: admin.actor,
+      role: admin.role,
+      action: "admin.clear-video-url",
+      entityType: "lesson",
+      entityId: lessonId,
+      details: {
+        moduleId: existing.module_id,
+      },
+    });
+
+    res.json({ lessonId, cleared: true });
   },
 );
 
