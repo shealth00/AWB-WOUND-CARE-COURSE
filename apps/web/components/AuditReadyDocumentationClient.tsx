@@ -118,6 +118,11 @@ export function AuditReadyDocumentationClient() {
           Clinical note structure that is defensible for audit and escalation.
         </p>
         <p className="muted">4 lessons / 32 minutes total.</p>
+        <div className="actions" style={{ marginTop: 12 }}>
+          <a className="button secondary" href="/#catalog">
+            Back to course catalog
+          </a>
+        </div>
       </section>
 
       {module ? (
@@ -125,12 +130,12 @@ export function AuditReadyDocumentationClient() {
           <h2>Course path</h2>
           <div className="stack">
             {module.lessons.map((lesson) => (
-              <div className="question" key={lesson.lessonId}>
+              <a className="question" href={`/lesson/${encodeURIComponent(lesson.lessonId)}`} key={lesson.lessonId}>
                 <strong>{lesson.title}</strong>
                 <div className="muted">
                   {lesson.durationMinutes} minutes / {lesson.objective}
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         </section>

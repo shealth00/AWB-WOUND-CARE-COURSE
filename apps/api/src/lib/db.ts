@@ -132,6 +132,15 @@ export async function initializeDatabase(): Promise<void> {
       created_at timestamptz not null default now()
     );
 
+    create table if not exists tool_submissions (
+      submission_id text primary key,
+      tool_type text not null,
+      payload jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_tool_submissions_tool_created on tool_submissions (tool_type, created_at desc);
+
     create table if not exists webhook_events (
       webhook_event_id text primary key,
       webhook_id text,

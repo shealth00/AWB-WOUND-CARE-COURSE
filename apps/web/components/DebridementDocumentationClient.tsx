@@ -119,6 +119,11 @@ export function DebridementDocumentationClient() {
         <h1>Debridement Documentation Mastery</h1>
         <p className="muted">Clear debridement documentation + coding-ready note structure.</p>
         <p className="muted">3 lessons / 24 minutes total.</p>
+        <div className="actions" style={{ marginTop: 12 }}>
+          <a className="button secondary" href="/#catalog">
+            Back to course catalog
+          </a>
+        </div>
       </section>
 
       {module ? (
@@ -126,12 +131,12 @@ export function DebridementDocumentationClient() {
           <h2>Course path</h2>
           <div className="stack">
             {module.lessons.map((lesson) => (
-              <div className="question" key={lesson.lessonId}>
+              <a className="question" href={`/lesson/${encodeURIComponent(lesson.lessonId)}`} key={lesson.lessonId}>
                 <strong>{lesson.title}</strong>
                 <div className="muted">
                   {lesson.durationMinutes} minutes / {lesson.objective}
                 </div>
-              </div>
+              </a>
             ))}
           </div>
         </section>

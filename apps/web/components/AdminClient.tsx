@@ -128,6 +128,13 @@ interface VideoGenerationJob {
   };
 }
 
+interface ToolSubmission {
+  submissionId: string;
+  toolType: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
 function buildCanonicalPayload(lesson?: CatalogLesson): string {
   const payload = {
     lessonId: lesson?.lesson_id ?? "",
@@ -217,6 +224,9 @@ export function AdminClient() {
   const [lessonVideoTargetId, setLessonVideoTargetId] = useState("");
   const [lessonVideoFile, setLessonVideoFile] = useState<File | null>(null);
   const [lessonVideoBusy, setLessonVideoBusy] = useState(false);
+  const [toolType, setToolType] = useState("audit");
+  const [toolSubmissions, setToolSubmissions] = useState<ToolSubmission[]>([]);
+  const [toolBusy, setToolBusy] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -433,6 +443,33 @@ export function AdminClient() {
       if (!silent) {
         setVideoJobsBusy(false);
       }
+    }
+  }
+
+  async function loadToolSubmissions() {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    setToolBusy(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        apiUrl(`/admin/tools/submissions?tool=${encodeURIComponent(toolType)}&limit=50`),
+        {
+          headers: adminHeaders(),
+        },
+      );
+      const payload = (await response.json()) as { submissions?: ToolSubmission[]; error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Tool submission lookup failed.");
+      }
+      setToolSubmissions(payload.submissions ?? []);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Tool submission lookup failed.");
+    } finally {
+      setToolBusy(false);
     }
   }
 
@@ -1083,6 +1120,37 @@ export function AdminClient() {
                 ))
               ) : (
                 <div className="muted">No uploaded media assets yet.</div>
+              )}
+            </div>
+          </section>
+          <section className="card">
+            <h2>Tool payload preview</h2>
+            <div className="split">
+              <label className="field">
+                Tool
+                <select onChange={(event) => setToolType(event.target.value)} value={toolType}>
+                  <option value="audit">Audit tool</option>
+                  <option value="debridement">Debridement tool</option>
+                  <option value="escalation">Escalation tool</option>
+                  <option value="ivr">IVR tool</option>
+                </select>
+              </label>
+              <button className="button secondary" disabled={!isAuthenticated || toolBusy} onClick={() => void loadToolSubmissions()} type="button">
+                {toolBusy ? "Loading..." : "Load payloads"}
+              </button>
+            </div>
+            <div className="stack" style={{ marginTop: 12 }}>
+              {toolSubmissions.length > 0 ? (
+                toolSubmissions.map((submission) => (
+                  <div className="question" key={submission.submissionId}>
+                    <strong>{submission.toolType.toUpperCase()} / {new Date(submission.createdAt).toLocaleString()}</strong>
+                    <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>
+                      {JSON.stringify(submission.payload, null, 2)}
+                    </pre>
+                  </div>
+                ))
+              ) : (
+                <div className="muted">No tool payloads loaded yet.</div>
               )}
             </div>
           </section>

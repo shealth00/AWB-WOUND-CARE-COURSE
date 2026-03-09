@@ -78,6 +78,34 @@ import { enforceVerifyRateLimit, getDisplayLearnerName } from "./lib/verify.js";
 import { cleanupGeneratedLessonArtifacts, generateLessonVideo } from "./lib/videoGeneration.js";
 
 export const app = express();
+const TOOL_SUBMISSION_LIMIT = 1000;
+
+async function recordToolSubmission(toolType: string, payload: Record<string, unknown>) {
+  const submissionId = randomUUID();
+
+  await query(
+    `
+      insert into tool_submissions (submission_id, tool_type, payload)
+      values ($1, $2, $3::jsonb)
+    `,
+    [submissionId, toolType, JSON.stringify(payload)],
+  );
+
+  await query(
+    `
+      delete from tool_submissions
+      where tool_type = $1
+      and submission_id not in (
+        select submission_id
+        from tool_submissions
+        where tool_type = $1
+        order by created_at desc
+        limit $2
+      )
+    `,
+    [toolType, TOOL_SUBMISSION_LIMIT],
+  );
+}
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -901,6 +929,10 @@ app.post(["/tools/wound-audit/score", "/api/tools/wound-audit/score"], (req, res
   }
 
   const result = scoreAuditReadyWoundNote(parseResult.data);
+  void recordToolSubmission("audit", {
+    input: parseResult.data,
+    output: result,
+  });
   res.json(result);
 });
 
@@ -912,10 +944,15 @@ app.post(["/tools/wound-audit/generate", "/api/tools/wound-audit/generate"], (re
     return;
   }
 
-  res.json({
+  const response = {
     note: generateAuditReadyWoundNote(parseResult.data),
     score: scoreAuditReadyWoundNote(parseResult.data),
+  };
+  void recordToolSubmission("audit", {
+    input: parseResult.data,
+    output: response,
   });
+  res.json(response);
 });
 
 app.get(
@@ -986,10 +1023,15 @@ app.post(["/tools/debridement/score", "/api/tools/debridement/score"], (req, res
     return;
   }
 
-  res.json({
+  const response = {
     ...scoreDebridementDocumentation(parseResult.data),
     suggestedCpt: suggestDebridementCptCode(parseResult.data),
+  };
+  void recordToolSubmission("debridement", {
+    input: parseResult.data,
+    output: response,
   });
+  res.json(response);
 });
 
 app.post(["/tools/debridement/generate", "/api/tools/debridement/generate"], (req, res) => {
@@ -1000,11 +1042,16 @@ app.post(["/tools/debridement/generate", "/api/tools/debridement/generate"], (re
     return;
   }
 
-  res.json({
+  const response = {
     note: generateDebridementNote(parseResult.data),
     score: scoreDebridementDocumentation(parseResult.data),
     suggestedCpt: suggestDebridementCptCode(parseResult.data),
+  };
+  void recordToolSubmission("debridement", {
+    input: parseResult.data,
+    output: response,
   });
+  res.json(response);
 });
 
 app.get(
@@ -1095,13 +1142,18 @@ app.post(["/tools/escalation/evaluate", "/api/tools/escalation/evaluate"], (req,
     standardCareCompleted: payload.standardCareCompleted,
   });
 
-  res.json({
+  const response = {
     percentAreaReduction,
     recommendationCode: evaluation.recommendationCode,
     recommendation: evaluation.recommendation,
     graftRecommendation: evaluation.graftRecommendation,
     rationale: evaluation.rationale,
+  };
+  void recordToolSubmission("escalation", {
+    input: payload,
+    output: response,
   });
+  res.json(response);
 });
 
 app.get(["/assets", "/api/assets"], async (req, res) => {
@@ -2468,7 +2520,7 @@ app.post(
       ],
     );
 
-    res.status(201).json({
+    const response = {
       submissionId,
       intakeId,
       caseId,
@@ -2478,7 +2530,12 @@ app.post(
       assignedTo: routing.assignedTo,
       nextActionDue,
       smartsheetSynced,
+    };
+    void recordToolSubmission("ivr", {
+      input: payload,
+      output: response,
     });
+    res.status(201).json(response);
   },
 );
 
@@ -2590,13 +2647,18 @@ app.post(["/ivr/events", "/api/ivr/events"], upload.single("audio"), async (req,
     ],
   );
 
-  res.status(201).json({
+  const response = {
     intakeId,
     priority: routing.priority,
     assignedTo: routing.assignedTo,
     nextActionDue,
     smartsheetSynced,
+  };
+  void recordToolSubmission("ivr", {
+    input: payload,
+    output: response,
   });
+  res.status(201).json(response);
 });
 
 app.post(["/smartsheet/webhook", "/api/smartsheet/webhook"], async (req, res) => {
@@ -2985,6 +3047,40 @@ app.get(["/admin/assets", "/api/admin/assets"], requireAdmin, async (_req, res) 
 
   res.json({
     assets: rows.map(mapMediaAsset),
+  });
+});
+
+app.get(["/admin/tools/submissions", "/api/admin/tools/submissions"], requireAdmin, async (req, res) => {
+  const schema = z.object({
+    tool: z.enum(["audit", "debridement", "escalation", "ivr"]),
+    limit: z.coerce.number().int().positive().max(1000).default(50),
+  });
+  const parseResult = schema.safeParse(req.query);
+
+  if (!parseResult.success) {
+    res.status(400).json({ error: parseResult.error.flatten() });
+    return;
+  }
+
+  const payload = parseResult.data;
+  const rows = await query<{ submission_id: string; tool_type: string; payload: Record<string, unknown>; created_at: string }>(
+    `
+      select submission_id, tool_type, payload, created_at
+      from tool_submissions
+      where tool_type = $1
+      order by created_at desc
+      limit $2
+    `,
+    [payload.tool, payload.limit],
+  );
+
+  res.json({
+    submissions: rows.map((row) => ({
+      submissionId: row.submission_id,
+      toolType: row.tool_type,
+      payload: row.payload,
+      createdAt: row.created_at,
+    })),
   });
 });
 
