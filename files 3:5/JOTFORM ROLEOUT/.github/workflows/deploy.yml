@@ -43,7 +43,7 @@ jobs:
               "sudo chmod 755 /var/www/forms.sallyhealth.org",
               "sudo find /var/www/forms.sallyhealth.org -type d | sudo xargs chmod 755",
               "sudo find /var/www/forms.sallyhealth.org -type f | sudo xargs chmod 644",
-              "printf '\''server {\\n  listen 80;\\n  server_name %s;\\n  root /var/www/forms.sallyhealth.org;\\n  index index.html;\\n\\n  location / {\\n    try_files $uri $uri/ /index.html;\\n  }\\n}\\n'\'' \"$SITE_HOST\" | sudo tee /etc/nginx/sites-available/forms.sallyhealth.org >/dev/null",
+              "printf '\''server {\\n  listen 80;\\n  server_name forms.sallyhealth.org;\\n  root /var/www/forms.sallyhealth.org;\\n  index index.html;\\n\\n  location / {\\n    try_files $uri $uri/ /index.html;\\n  }\\n}\\n'\'' | sudo tee /etc/nginx/sites-available/forms.sallyhealth.org >/dev/null",
               "sudo ln -sfn /etc/nginx/sites-available/forms.sallyhealth.org /etc/nginx/sites-enabled/forms.sallyhealth.org",
               "sudo rm -f /etc/nginx/sites-enabled/default",
               "sudo nginx -t",
