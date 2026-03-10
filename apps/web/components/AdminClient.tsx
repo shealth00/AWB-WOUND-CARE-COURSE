@@ -225,6 +225,8 @@ export function AdminClient() {
   const [lessonVideoFile, setLessonVideoFile] = useState<File | null>(null);
   const [lessonVideoBusy, setLessonVideoBusy] = useState(false);
   const [toolType, setToolType] = useState("audit");
+  const [toolStart, setToolStart] = useState("");
+  const [toolEnd, setToolEnd] = useState("");
   const [toolSubmissions, setToolSubmissions] = useState<ToolSubmission[]>([]);
   const [toolBusy, setToolBusy] = useState(false);
 
@@ -455,8 +457,17 @@ export function AdminClient() {
     setError(null);
 
     try {
+      const params = new URLSearchParams();
+      params.set("tool", toolType);
+      params.set("limit", "50");
+      if (toolStart) {
+        params.set("start", new Date(toolStart).toISOString());
+      }
+      if (toolEnd) {
+        params.set("end", new Date(toolEnd).toISOString());
+      }
       const response = await fetch(
-        apiUrl(`/admin/tools/submissions?tool=${encodeURIComponent(toolType)}&limit=50`),
+        apiUrl(`/admin/tools/submissions?${params.toString()}`),
         {
           headers: adminHeaders(),
         },
@@ -468,6 +479,52 @@ export function AdminClient() {
       setToolSubmissions(payload.submissions ?? []);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Tool submission lookup failed.");
+    } finally {
+      setToolBusy(false);
+    }
+  }
+
+  function buildToolCsvUrl() {
+    const params = new URLSearchParams();
+    params.set("tool", toolType);
+    params.set("limit", "1000");
+    if (toolStart) {
+      params.set("start", new Date(toolStart).toISOString());
+    }
+    if (toolEnd) {
+      params.set("end", new Date(toolEnd).toISOString());
+    }
+    return apiUrl(`/admin/tools/submissions.csv?${params.toString()}`);
+  }
+
+  async function clearToolSubmissions() {
+    setError(null);
+    setNotice(null);
+    if (!isAuthenticated) {
+      setError("Admin authentication is required.");
+      return;
+    }
+    const confirmed = window.confirm(`Clear all ${toolType} tool submissions?`);
+    if (!confirmed) {
+      return;
+    }
+    setToolBusy(true);
+    try {
+      const response = await fetch(
+        apiUrl(`/admin/tools/submissions?tool=${encodeURIComponent(toolType)}`),
+        {
+          method: "DELETE",
+          headers: adminHeaders(),
+        },
+      );
+      const payload = (await response.json()) as { error?: string; deleted?: number };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Clear failed.");
+      }
+      setToolSubmissions([]);
+      setNotice(`Cleared ${payload.deleted ?? 0} submissions for ${toolType}.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Clear failed.");
     } finally {
       setToolBusy(false);
     }
@@ -1135,8 +1192,24 @@ export function AdminClient() {
                   <option value="ivr">IVR tool</option>
                 </select>
               </label>
+              <label className="field">
+                Start (optional)
+                <input type="date" value={toolStart} onChange={(event) => setToolStart(event.target.value)} />
+              </label>
+              <label className="field">
+                End (optional)
+                <input type="date" value={toolEnd} onChange={(event) => setToolEnd(event.target.value)} />
+              </label>
+            </div>
+            <div className="actions" style={{ marginTop: 12 }}>
               <button className="button secondary" disabled={!isAuthenticated || toolBusy} onClick={() => void loadToolSubmissions()} type="button">
                 {toolBusy ? "Loading..." : "Load payloads"}
+              </button>
+              <a className="button secondary" href={buildToolCsvUrl()} target="_blank" rel="noreferrer">
+                Download CSV
+              </a>
+              <button className="button secondary" disabled={!isAuthenticated || toolBusy} onClick={() => void clearToolSubmissions()} type="button">
+                Clear tool payloads
               </button>
             </div>
             <div className="stack" style={{ marginTop: 12 }}>

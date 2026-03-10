@@ -3054,6 +3054,8 @@ app.get(["/admin/tools/submissions", "/api/admin/tools/submissions"], requireAdm
   const schema = z.object({
     tool: z.enum(["audit", "debridement", "escalation", "ivr"]),
     limit: z.coerce.number().int().positive().max(1000).default(50),
+    start: z.string().datetime().optional(),
+    end: z.string().datetime().optional(),
   });
   const parseResult = schema.safeParse(req.query);
 
@@ -3063,15 +3065,22 @@ app.get(["/admin/tools/submissions", "/api/admin/tools/submissions"], requireAdm
   }
 
   const payload = parseResult.data;
-  const rows = await query<{ submission_id: string; tool_type: string; payload: Record<string, unknown>; created_at: string }>(
+  const rows = await query<{
+    submission_id: string;
+    tool_type: string;
+    payload: Record<string, unknown>;
+    created_at: string;
+  }>(
     `
       select submission_id, tool_type, payload, created_at
       from tool_submissions
       where tool_type = $1
+        and ($2::timestamptz is null or created_at >= $2::timestamptz)
+        and ($3::timestamptz is null or created_at <= $3::timestamptz)
       order by created_at desc
-      limit $2
+      limit $4
     `,
-    [payload.tool, payload.limit],
+    [payload.tool, payload.start ?? null, payload.end ?? null, payload.limit],
   );
 
   res.json({
@@ -3082,6 +3091,87 @@ app.get(["/admin/tools/submissions", "/api/admin/tools/submissions"], requireAdm
       createdAt: row.created_at,
     })),
   });
+});
+
+app.get(["/admin/tools/submissions.csv", "/api/admin/tools/submissions.csv"], requireAdmin, async (req, res) => {
+  const schema = z.object({
+    tool: z.enum(["audit", "debridement", "escalation", "ivr"]),
+    limit: z.coerce.number().int().positive().max(1000).default(100),
+    start: z.string().datetime().optional(),
+    end: z.string().datetime().optional(),
+  });
+  const parseResult = schema.safeParse(req.query);
+
+  if (!parseResult.success) {
+    res.status(400).json({ error: parseResult.error.flatten() });
+    return;
+  }
+
+  const payload = parseResult.data;
+  const rows = await query<{
+    submission_id: string;
+    tool_type: string;
+    payload: Record<string, unknown>;
+    created_at: string;
+  }>(
+    `
+      select submission_id, tool_type, payload, created_at
+      from tool_submissions
+      where tool_type = $1
+        and ($2::timestamptz is null or created_at >= $2::timestamptz)
+        and ($3::timestamptz is null or created_at <= $3::timestamptz)
+      order by created_at desc
+      limit $4
+    `,
+    [payload.tool, payload.start ?? null, payload.end ?? null, payload.limit],
+  );
+
+  const header = ["submission_id", "tool_type", "created_at", "payload_json"].join(",");
+  const lines = rows.map((row) => {
+    const json = JSON.stringify(row.payload).replaceAll("\"", "\"\"");
+    return `"${row.submission_id}","${row.tool_type}","${row.created_at}","${json}"`;
+  });
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename=\"${payload.tool}-submissions.csv\"`);
+  res.send([header, ...lines].join("\n"));
+});
+
+app.delete(["/admin/tools/submissions", "/api/admin/tools/submissions"], requireAdmin, async (req, res) => {
+  const schema = z.object({
+    tool: z.enum(["audit", "debridement", "escalation", "ivr"]),
+  });
+  const parseResult = schema.safeParse(req.query);
+
+  if (!parseResult.success) {
+    res.status(400).json({ error: parseResult.error.flatten() });
+    return;
+  }
+
+  const payload = parseResult.data;
+  const admin = getAdminIdentity(req);
+
+  const result = await query<{ count: string }>(
+    `
+      delete from tool_submissions
+      where tool_type = $1
+      returning submission_id
+    `,
+    [payload.tool],
+  );
+
+  await insertAuditLog({
+    actor: admin.actor,
+    role: admin.role,
+    action: "admin.clear-tool-submissions",
+    entityType: "tool_submissions",
+    entityId: payload.tool,
+    details: {
+      deleted: result.length,
+    },
+  });
+
+  res.json({ cleared: true, tool: payload.tool, deleted: result.length });
 });
 
 app.post(
