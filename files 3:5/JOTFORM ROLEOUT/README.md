@@ -33,3 +33,14 @@ The runtime dataset in `screen-data.js` is derived from:
 - `/Volumes/SERVER MEM3/JOTFORM ROLEOUT/platform_screen_inventory.csv`
 
 The prototype is static and self-contained once `screen-data.js` is present.
+
+## Deploy
+
+The GitHub Actions workflow at `.github/workflows/deploy.yml` deploys the site to `forms.sallyhealth.org` through AWS Systems Manager.
+
+Required repository secrets:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+The workflow targets EC2 instance `i-0ea90189e56dfae1b` in `us-east-1`, downloads the `main` branch archive from GitHub, syncs the site into `/var/www/forms.sallyhealth.org`, and reloads nginx.
