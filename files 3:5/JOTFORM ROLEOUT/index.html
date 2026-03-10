@@ -13,12 +13,12 @@
       <div class="brand">
         <div class="brand-mark">69</div>
         <div>
-          <p class="eyebrow">Platform Rollout</p>
-          <h1>Screen Inventory</h1>
+          <p id="workspace-kicker" class="eyebrow">Admin Rollout</p>
+          <h1 id="workspace-title">Execution Console</h1>
         </div>
       </div>
 
-      <p class="sidebar-copy">
+      <p id="sidebar-copy" class="sidebar-copy">
         Source-aligned workspace for a 69-screen platform plan. Every route, state, contract, and acceptance rule is reviewable from one shell.
       </p>
 
@@ -56,7 +56,7 @@
     <main class="workspace">
       <header class="topbar">
         <div>
-          <p class="eyebrow">69 Screen-Level Specifications</p>
+          <p id="topbar-kicker" class="eyebrow">Admin rollout workspace</p>
           <h2 id="view-title">Route Blueprint</h2>
         </div>
         <div class="topbar-actions">
@@ -70,6 +70,13 @@
         <label class="control-field">
           <span>Search</span>
           <input id="screen-search" type="search" placeholder="Module, route, API, DB object, acceptance criteria">
+        </label>
+        <label class="control-field">
+          <span>Persona</span>
+          <select id="persona-filter">
+            <option value="admin">Admin Workspace</option>
+            <option value="all">All Screens</option>
+          </select>
         </label>
         <label class="control-field">
           <span>Feature</span>
@@ -88,6 +95,7 @@
           <span>Route</span>
           <div id="route-readout" class="route-readout"></div>
         </div>
+        <div id="scope-summary" class="scope-summary"></div>
       </section>
 
       <section class="hero-grid">

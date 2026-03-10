@@ -1,6 +1,8 @@
 const STORAGE_KEY = "platform-rollout-workspace-v2";
 const ALL_MODULES = "All Modules";
 const ALL_FEATURES = "All Features";
+const ADMIN_PERSONA = "admin";
+const ALL_PERSONA = "all";
 const MODULE_ACCENTS = {
   Platform: "#c86642",
   Identity: "#1f7a70",
@@ -42,6 +44,10 @@ const ROLLOUT_PHASES = [
 ];
 
 const ADMIN_PERMISSIONS = ["Admin", "Owner", "Security Admin", "Billing Admin"];
+const PERSONA_LABELS = {
+  [ADMIN_PERSONA]: "Admin Workspace",
+  [ALL_PERSONA]: "All Screens"
+};
 
 const CHECKLIST_DEFINITIONS = [
   {
@@ -78,24 +84,29 @@ const CHECKLIST_DEFINITIONS = [
 
 const routeMap = new Map(screenInventory.map((screen) => [screen.route, screen]));
 const moduleOrder = [...new Set(screenInventory.map((screen) => screen.module))];
-const moduleFeaturePairs = [...new Set(screenInventory.map((screen) => `${screen.module}::${screen.feature}`))];
-const uniqueApiCount = new Set(screenInventory.flatMap((screen) => screen.apis)).size;
 const defaultRoute = screenInventory[0]?.route ?? "";
+const defaultAdminRoute = screenInventory.find((screen) => isAdminOnly(screen))?.route ?? defaultRoute;
 
 const elements = {
+  workspaceKicker: document.querySelector("#workspace-kicker"),
+  workspaceTitle: document.querySelector("#workspace-title"),
+  sidebarCopy: document.querySelector("#sidebar-copy"),
   sidebarStats: document.querySelector("#sidebar-stats"),
   moduleFilter: document.querySelector("#module-filter"),
   clearModule: document.querySelector("#clear-module"),
   journeyRail: document.querySelector("#journey-rail"),
   screenSearch: document.querySelector("#screen-search"),
+  personaFilter: document.querySelector("#persona-filter"),
   featureFilter: document.querySelector("#feature-filter"),
   sortOrder: document.querySelector("#sort-order"),
+  scopeSummary: document.querySelector("#scope-summary"),
   routeReadout: document.querySelector("#route-readout"),
   exportInventory: document.querySelector("#export-inventory"),
   exportProgress: document.querySelector("#export-progress"),
   randomScreen: document.querySelector("#random-screen"),
   nextScreen: document.querySelector("#next-screen"),
   clearFilters: document.querySelector("#clear-filters"),
+  topbarKicker: document.querySelector("#topbar-kicker"),
   viewTitle: document.querySelector("#view-title"),
   screenKicker: document.querySelector("#screen-kicker"),
   screenTitle: document.querySelector("#screen-title"),
@@ -150,9 +161,15 @@ function bindEvents() {
     render();
   });
 
+  elements.personaFilter.addEventListener("change", (event) => {
+    state.persona = event.target.value;
+    persistState();
+    render();
+  });
+
   elements.featureFilter.addEventListener("change", (event) => {
     state.feature = event.target.value;
-    const filtered = getFilteredScreens();
+    const filtered = getVisibleScreens();
     if (filtered.length && !filtered.some((screen) => screen.route === state.selectedRoute)) {
       state.selectedRoute = filtered[0].route;
       updateHash(state.selectedRoute);
@@ -191,8 +208,8 @@ function bindEvents() {
   });
 
   elements.randomScreen.addEventListener("click", () => {
-    const pool = getFilteredScreens();
-    const targetPool = pool.length ? pool : screenInventory;
+    const pool = getVisibleScreens();
+    const targetPool = pool.length ? pool : getScopedScreens();
     const randomScreen = targetPool[Math.floor(Math.random() * targetPool.length)];
     if (randomScreen) {
       selectScreen(randomScreen.route);
@@ -200,8 +217,8 @@ function bindEvents() {
   });
 
   elements.nextScreen.addEventListener("click", () => {
-    const pool = getFilteredScreens();
-    const targetPool = pool.length ? pool : screenInventory;
+    const pool = getVisibleScreens();
+    const targetPool = pool.length ? pool : getScopedScreens();
     const currentIndex = targetPool.findIndex((screen) => screen.route === state.selectedRoute);
     const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % targetPool.length : 0;
     const nextScreen = targetPool[nextIndex];
@@ -298,46 +315,53 @@ function bindEvents() {
 
 function render() {
   normalizeState();
-  const filteredScreens = getFilteredScreens();
-  const selectedScreen = routeMap.get(state.selectedRoute) || filteredScreens[0] || routeMap.get(defaultRoute);
+  const scopedScreens = getScopedScreens();
+  const visibleScreens = getVisibleScreens(scopedScreens);
+  const selectedScreen = routeMap.get(state.selectedRoute) || visibleScreens[0] || scopedScreens[0] || routeMap.get(defaultRoute);
 
   if (!selectedScreen) return;
 
   document.documentElement.style.setProperty("--module-accent", getModuleAccent(selectedScreen.module));
-  document.title = `${selectedScreen.screen} | Platform Rollout Blueprint`;
+  document.title = `${selectedScreen.screen} | ${getWorkspaceTitle()}`;
   elements.viewTitle.textContent = selectedScreen.screen;
 
-  syncControls();
-  renderSidebarStats(filteredScreens);
-  renderModuleFilter();
+  syncControls(scopedScreens, visibleScreens);
+  renderWorkspaceChrome(selectedScreen, scopedScreens, visibleScreens);
+  renderSidebarStats(scopedScreens, visibleScreens);
+  renderModuleFilter(scopedScreens);
   renderJourney(selectedScreen);
-  renderHero(selectedScreen);
-  renderCoverageGrid(selectedScreen, filteredScreens);
-  renderCatalog(filteredScreens, selectedScreen);
+  renderHero(selectedScreen, scopedScreens, visibleScreens);
+  renderCoverageGrid(selectedScreen, scopedScreens, visibleScreens);
+  renderCatalog(visibleScreens, selectedScreen, scopedScreens);
   renderBlueprint(selectedScreen);
   renderStates(selectedScreen);
   renderContracts(selectedScreen);
   renderDependencies(selectedScreen);
   renderExecution(selectedScreen);
   renderAcceptance(selectedScreen);
-  renderModuleBoard(selectedScreen);
-  renderPortfolioProgress(selectedScreen);
-  renderPhaseBoard(selectedScreen);
+  renderModuleBoard(selectedScreen, scopedScreens);
+  renderPortfolioProgress(selectedScreen, buildProgressSnapshot(scopedScreens, visibleScreens));
+  renderPhaseBoard(selectedScreen, scopedScreens);
 
   persistState();
 }
 
-function syncControls() {
+function syncControls(scopedScreens, visibleScreens) {
   if (elements.screenSearch.value !== state.query) {
     elements.screenSearch.value = state.query;
   }
 
-  renderFeatureOptions();
+  elements.personaFilter.value = state.persona;
+  renderFeatureOptions(scopedScreens);
   elements.sortOrder.value = state.sort;
+
+  if (visibleScreens.length) {
+    elements.clearFilters.textContent = "Reset";
+  }
 }
 
-function renderFeatureOptions() {
-  const features = getAvailableFeatures();
+function renderFeatureOptions(scopedScreens) {
+  const features = getAvailableFeatures(scopedScreens);
   const options = [ALL_FEATURES, ...features];
   if (!options.includes(state.feature)) {
     state.feature = ALL_FEATURES;
@@ -349,12 +373,33 @@ function renderFeatureOptions() {
   elements.featureFilter.value = state.feature;
 }
 
-function renderSidebarStats(filteredScreens) {
+function renderWorkspaceChrome(selectedScreen, scopedScreens, visibleScreens) {
+  const personaLabel = getPersonaLabel();
+  const scopeLabel = state.persona === ADMIN_PERSONA ? "Admin Rollout" : "Portfolio Rollout";
+
+  elements.workspaceKicker.textContent = scopeLabel;
+  elements.workspaceTitle.textContent = state.persona === ADMIN_PERSONA ? "Execution Console" : "Screen Inventory";
+  elements.sidebarCopy.textContent =
+    state.persona === ADMIN_PERSONA
+      ? `Admin-first workspace for planning delivery across ${formatNumber(scopedScreens.length)} privileged routes. Keep execution, dependencies, and handoff in one place.`
+      : "Source-aligned workspace for a 69-screen platform plan. Every route, state, contract, and acceptance rule is reviewable from one shell.";
+  elements.topbarKicker.textContent = `${personaLabel} / ${formatNumber(visibleScreens.length)} routes in current view`;
+  elements.screenKicker.textContent = `${personaLabel} / ${selectedScreen.module} / ${selectedScreen.feature} / #${selectedScreen.index}`;
+  elements.scopeSummary.innerHTML = `
+    <p class="eyebrow">Scope</p>
+    <strong>${escapeHtml(personaLabel)}</strong>
+    <span>${escapeHtml(`${formatNumber(scopedScreens.length)} scoped routes, ${formatNumber(visibleScreens.length)} currently visible`)}</span>
+  `;
+}
+
+function renderSidebarStats(scopedScreens, visibleScreens) {
+  const scopedModules = getScopedModules(scopedScreens);
+  const scopedFeaturePairs = new Set(scopedScreens.map((screen) => `${screen.module}::${screen.feature}`));
   const stats = [
-    { label: "Screens", value: screenInventory.length },
-    { label: "Modules", value: moduleOrder.length },
-    { label: "Features", value: moduleFeaturePairs.length },
-    { label: "In View", value: filteredScreens.length }
+    { label: state.persona === ADMIN_PERSONA ? "Scope Routes" : "Screens", value: scopedScreens.length },
+    { label: "Modules", value: scopedModules.length },
+    { label: "Features", value: scopedFeaturePairs.size },
+    { label: "In View", value: visibleScreens.length }
   ];
 
   elements.sidebarStats.innerHTML = stats
@@ -369,10 +414,12 @@ function renderSidebarStats(filteredScreens) {
     .join("");
 }
 
-function renderModuleFilter() {
-  elements.moduleFilter.innerHTML = moduleOrder
+function renderModuleFilter(scopedScreens) {
+  const modules = getScopedModules(scopedScreens);
+
+  elements.moduleFilter.innerHTML = modules
     .map((module) => {
-      const count = screenInventory.filter((screen) => screen.module === module).length;
+      const count = scopedScreens.filter((screen) => screen.module === module).length;
       const isActive = state.module === module;
       return `
         <button class="module-button ${isActive ? "is-active" : ""}" type="button" data-module="${escapeAttribute(module)}" style="--module-accent: ${getModuleAccent(module)};">
@@ -433,9 +480,8 @@ function renderJourney(selectedScreen) {
   `;
 }
 
-function renderHero(selectedScreen) {
+function renderHero(selectedScreen, scopedScreens, visibleScreens) {
   const execution = getExecutionMetadata(selectedScreen);
-  elements.screenKicker.textContent = `${selectedScreen.module} / ${selectedScreen.feature} / #${selectedScreen.index}`;
   elements.screenTitle.textContent = selectedScreen.screen;
   elements.screenPurpose.textContent = selectedScreen.purpose;
 
@@ -458,12 +504,14 @@ function renderHero(selectedScreen) {
     .join("");
 
   const pills = [
+    { label: "Persona", value: getPersonaLabel() },
     { label: "Module", value: selectedScreen.module },
     { label: "Feature", value: selectedScreen.feature },
     { label: "Phase", value: `${execution.phase.label} ${execution.phase.title}` },
     { label: "Complexity", value: execution.complexity.tier },
     { label: "Permission", value: selectedScreen.permissions[0] || "No permissions listed" },
-    { label: "Route", value: `#${selectedScreen.index} of ${screenInventory.length}` }
+    { label: "Route", value: `#${selectedScreen.index} of ${screenInventory.length}` },
+    { label: "Scope", value: `${visibleScreens.length}/${scopedScreens.length} visible` }
   ];
 
   if (isAdminOnly(selectedScreen)) {
@@ -493,16 +541,17 @@ function renderHero(selectedScreen) {
 
   elements.routeReadout.innerHTML = `
     <strong>${escapeHtml(selectedScreen.route)}</strong>
-    <span class="sequence-chip">#${selectedScreen.index}</span>
+    <span class="sequence-chip">${escapeHtml(getPersonaLabel())}</span>
   `;
 }
 
-function renderCoverageGrid(selectedScreen, filteredScreens) {
-  const selectedModuleCount = screenInventory.filter((screen) => screen.module === selectedScreen.module).length;
+function renderCoverageGrid(selectedScreen, scopedScreens, visibleScreens) {
+  const selectedModuleCount = scopedScreens.filter((screen) => screen.module === selectedScreen.module).length;
+  const scopedApiCount = new Set(scopedScreens.flatMap((screen) => screen.apis)).size;
   const coverageCards = [
-    { label: "Visible", value: filteredScreens.length },
+    { label: "Visible", value: visibleScreens.length },
     { label: "Module Depth", value: selectedModuleCount },
-    { label: "Unique APIs", value: uniqueApiCount },
+    { label: state.persona === ADMIN_PERSONA ? "Scoped APIs" : "Unique APIs", value: scopedApiCount },
     { label: "DB Objects", value: selectedScreen.dbObjects.length }
   ];
 
@@ -518,11 +567,12 @@ function renderCoverageGrid(selectedScreen, filteredScreens) {
     .join("");
 }
 
-function renderCatalog(filteredScreens, selectedScreen) {
-  const selectionHidden = filteredScreens.every((screen) => screen.route !== selectedScreen.route);
-  elements.catalogCount.textContent = `${filteredScreens.length} routes in view`;
+function renderCatalog(visibleScreens, selectedScreen, scopedScreens) {
+  const selectionHidden = visibleScreens.every((screen) => screen.route !== selectedScreen.route);
+  const selectionOutOfScope = scopedScreens.every((screen) => screen.route !== selectedScreen.route);
+  elements.catalogCount.textContent = `${visibleScreens.length} routes in view`;
 
-  if (!filteredScreens.length) {
+  if (!visibleScreens.length) {
     elements.routeCatalog.innerHTML = `
       <div class="empty-catalog">
         <p>No rows match the current filter set.</p>
@@ -535,14 +585,18 @@ function renderCatalog(filteredScreens, selectedScreen) {
   const hiddenNotice = selectionHidden
     ? `
         <div class="empty-catalog">
-          <p>The open route stays pinned in the detail canvas, but the current search/filter set hides it from the catalog.</p>
+          <p>${
+            selectionOutOfScope && state.persona === ADMIN_PERSONA
+              ? "The open route stays pinned in the detail canvas, but it sits outside the admin workspace scope."
+              : "The open route stays pinned in the detail canvas, but the current search/filter set hides it from the catalog."
+          }</p>
         </div>
       `
     : "";
 
   elements.routeCatalog.innerHTML = `
     ${hiddenNotice}
-    ${filteredScreens
+    ${visibleScreens
       .map(
         (screen) => `
           <button
@@ -844,11 +898,11 @@ function renderAcceptance(selectedScreen) {
     .join("");
 }
 
-function renderPhaseBoard(selectedScreen) {
+function renderPhaseBoard(selectedScreen, scopedScreens) {
   const selectedPhase = getPhaseForModule(selectedScreen.module);
 
   elements.phaseBoard.innerHTML = ROLLOUT_PHASES.map((phase) => {
-    const phaseScreens = screenInventory.filter((screen) => phase.modules.includes(screen.module));
+    const phaseScreens = scopedScreens.filter((screen) => phase.modules.includes(screen.module));
     const phaseApis = new Set(phaseScreens.flatMap((screen) => screen.apis)).size;
     const samples = phaseScreens.slice(0, 4);
     return `
@@ -886,10 +940,10 @@ function renderPhaseBoard(selectedScreen) {
   }).join("");
 }
 
-function renderModuleBoard(selectedScreen) {
-  elements.moduleBoard.innerHTML = moduleOrder
+function renderModuleBoard(selectedScreen, scopedScreens) {
+  elements.moduleBoard.innerHTML = getScopedModules(scopedScreens)
     .map((module) => {
-      const moduleScreens = screenInventory.filter((screen) => screen.module === module);
+      const moduleScreens = scopedScreens.filter((screen) => screen.module === module);
       const features = [...new Set(moduleScreens.map((screen) => screen.feature))];
       const previewRoutes = moduleScreens.slice(0, 3);
       const remainingCount = moduleScreens.length - previewRoutes.length;
@@ -935,12 +989,16 @@ function renderModuleBoard(selectedScreen) {
     .join("");
 }
 
-function renderPortfolioProgress(selectedScreen) {
-  const snapshot = buildProgressSnapshot();
+function renderPortfolioProgress(selectedScreen, snapshot) {
   const activeModule = state.module === ALL_MODULES ? selectedScreen.module : state.module;
   const activePhase = getPhaseForModule(selectedScreen.module);
 
   const summaryCards = [
+    {
+      label: "Scope",
+      value: getPersonaLabel(),
+      detail: `${snapshot.visibleScreenCount}/${snapshot.totalScopedScreens} routes in current view`
+    },
     {
       label: "Checklist Completion",
       value: formatPercent(snapshot.overall.checklistPercent),
@@ -1028,8 +1086,16 @@ function renderPortfolioProgress(selectedScreen) {
     .join("");
 }
 
-function getFilteredScreens() {
-  return [...screenInventory]
+function getScopedScreens(persona = state.persona) {
+  if (persona === ADMIN_PERSONA) {
+    return screenInventory.filter((screen) => isAdminOnly(screen));
+  }
+
+  return [...screenInventory];
+}
+
+function getVisibleScreens(scopedScreens = getScopedScreens()) {
+  return [...scopedScreens]
     .filter((screen) => {
       if (state.module !== ALL_MODULES && screen.module !== state.module) return false;
       if (state.feature !== ALL_FEATURES && screen.feature !== state.feature) return false;
@@ -1037,6 +1103,11 @@ function getFilteredScreens() {
       return buildSearchIndex(screen).includes(state.query.trim().toLowerCase());
     })
     .sort(sortScreens);
+}
+
+function getScopedModules(scopedScreens = getScopedScreens()) {
+  const scopedModuleSet = new Set(scopedScreens.map((screen) => screen.module));
+  return moduleOrder.filter((module) => scopedModuleSet.has(module));
 }
 
 function getRelatedScreens(selectedScreen, field) {
@@ -1094,18 +1165,18 @@ function buildSearchIndex(screen) {
     .toLowerCase();
 }
 
-function getAvailableFeatures() {
+function getAvailableFeatures(scopedScreens = getScopedScreens()) {
   const screens =
     state.module === ALL_MODULES
-      ? screenInventory
-      : screenInventory.filter((screen) => screen.module === state.module);
+      ? scopedScreens
+      : scopedScreens.filter((screen) => screen.module === state.module);
   return [...new Set(screens.map((screen) => screen.feature))];
 }
 
 function focusModule(module) {
   state.module = module;
   state.feature = ALL_FEATURES;
-  const filtered = getFilteredScreens();
+  const filtered = getVisibleScreens();
   if (filtered.length && !filtered.some((screen) => screen.route === state.selectedRoute)) {
     state.selectedRoute = filtered[0].route;
     updateHash(state.selectedRoute);
@@ -1184,8 +1255,20 @@ function deriveDeliveryTracks(screen) {
   return [...new Set(tracks)];
 }
 
+function getPersonaLabel(persona = state.persona) {
+  return PERSONA_LABELS[persona] || PERSONA_LABELS[ADMIN_PERSONA];
+}
+
+function getWorkspaceTitle() {
+  return state.persona === ADMIN_PERSONA ? "Admin Rollout Blueprint" : "Platform Rollout Blueprint";
+}
+
+function getScopeType() {
+  return state.persona === ADMIN_PERSONA ? "admin-scoped" : "all-screens";
+}
+
 function isAdminOnly(screen) {
-  return screen.permissions.some((permission) => ADMIN_PERMISSIONS.includes(permission));
+  return Array.isArray(screen?.permissions) && screen.permissions.some((permission) => ADMIN_PERMISSIONS.includes(permission));
 }
 
 function buildChecklist(screen) {
@@ -1243,13 +1326,17 @@ function getGroupProgress(screens) {
   };
 }
 
-function buildProgressSnapshot() {
+function buildProgressSnapshot(scopedScreens = getScopedScreens(), visibleScreens = getVisibleScreens(scopedScreens)) {
   return {
     exportedAt: new Date().toISOString(),
+    persona: state.persona,
+    scopeType: getScopeType(),
+    visibleScreenCount: visibleScreens.length,
+    totalScopedScreens: scopedScreens.length,
     selectedRoute: state.selectedRoute,
-    overall: getGroupProgress(screenInventory),
+    overall: getGroupProgress(scopedScreens),
     phases: ROLLOUT_PHASES.map((phase) => {
-      const screens = screenInventory.filter((screen) => phase.modules.includes(screen.module));
+      const screens = scopedScreens.filter((screen) => phase.modules.includes(screen.module));
       return {
         id: phase.id,
         label: phase.label,
@@ -1259,8 +1346,8 @@ function buildProgressSnapshot() {
         ...getGroupProgress(screens)
       };
     }),
-    modules: moduleOrder.map((module) => {
-      const screens = screenInventory.filter((screen) => screen.module === module);
+    modules: getScopedModules(scopedScreens).map((module) => {
+      const screens = scopedScreens.filter((screen) => screen.module === module);
       return {
         module,
         phase: getPhaseForModule(module),
@@ -1268,7 +1355,7 @@ function buildProgressSnapshot() {
         ...getGroupProgress(screens)
       };
     }),
-    screens: screenInventory.map((screen) => {
+    screens: scopedScreens.map((screen) => {
       const progress = getScreenProgress(screen);
       return {
         id: screen.id,
@@ -1302,11 +1389,17 @@ function normalizeState() {
     state.selectedRoute = defaultRoute;
   }
 
+  const validPersonas = [ADMIN_PERSONA, ALL_PERSONA];
+  if (!validPersonas.includes(state.persona)) {
+    state.persona = ADMIN_PERSONA;
+  }
+
   if (!state.checklistProgress || typeof state.checklistProgress !== "object") {
     state.checklistProgress = {};
   }
 
-  if (!moduleOrder.includes(state.module) && state.module !== ALL_MODULES) {
+  const scopedModules = getScopedModules();
+  if (!scopedModules.includes(state.module) && state.module !== ALL_MODULES) {
     state.module = ALL_MODULES;
   }
 
@@ -1334,6 +1427,13 @@ function syncStateWithHash(isInitial = false) {
       }
     }
     persistState();
+    return;
+  }
+
+  if (isInitial && state.persona === ADMIN_PERSONA && !isAdminOnly(routeMap.get(state.selectedRoute) || {})) {
+    state.selectedRoute = defaultAdminRoute;
+    persistState();
+    updateHash(state.selectedRoute, true);
     return;
   }
 
@@ -1413,20 +1513,22 @@ function loadState() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
     return {
+      persona: saved?.persona ?? ADMIN_PERSONA,
       module: saved?.module ?? ALL_MODULES,
       feature: saved?.feature ?? ALL_FEATURES,
       query: saved?.query ?? "",
       sort: saved?.sort ?? "index",
-      selectedRoute: saved?.selectedRoute ?? defaultRoute,
+      selectedRoute: saved?.selectedRoute ?? defaultAdminRoute,
       checklistProgress: saved?.checklistProgress ?? {}
     };
   } catch (error) {
     return {
+      persona: ADMIN_PERSONA,
       module: ALL_MODULES,
       feature: ALL_FEATURES,
       query: "",
       sort: "index",
-      selectedRoute: defaultRoute,
+      selectedRoute: defaultAdminRoute,
       checklistProgress: {}
     };
   }

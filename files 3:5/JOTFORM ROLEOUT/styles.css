@@ -375,7 +375,7 @@ h4 {
 }
 
 .controls {
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.9fr) minmax(0, 0.7fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.95fr) minmax(0, 0.95fr) minmax(0, 0.7fr) minmax(0, 1fr);
   align-items: end;
 }
 
@@ -427,6 +427,29 @@ h4 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.scope-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(28, 38, 48, 0.08);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--module-accent, var(--accent)) 8%, white), rgba(255, 255, 255, 0.72));
+  box-shadow: var(--shadow-soft);
+}
+
+.scope-summary strong {
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.scope-summary span {
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .hero-grid {

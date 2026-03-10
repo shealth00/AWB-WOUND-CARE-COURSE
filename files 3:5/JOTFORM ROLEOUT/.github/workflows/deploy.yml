@@ -15,6 +15,7 @@ jobs:
     env:
       AWS_REGION: us-east-1
       INSTANCE_ID: i-0ea90189e56dfae1b
+      SITE_IP: 184.73.109.3
       SITE_HOST: forms.sallyhealth.org
       REPO_ARCHIVE_URL: https://github.com/shealth00/sally-health-forms/archive/refs/heads/main.tar.gz
 
@@ -84,3 +85,7 @@ jobs:
             --command-id "$COMMAND_ID" \
             --instance-id "$INSTANCE_ID" \
             --query '{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}'
+
+          curl --fail --silent --show-error --head \
+            --header "Host: $SITE_HOST" \
+            "http://$SITE_IP" >/dev/null
