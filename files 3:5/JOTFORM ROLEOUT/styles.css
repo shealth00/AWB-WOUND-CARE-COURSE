@@ -62,6 +62,10 @@ h4 {
   margin: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .page-shell {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -215,8 +219,31 @@ h4 {
   gap: 0.75rem;
 }
 
+.section-toggle,
+.details-toggle {
+  list-style: none;
+  cursor: pointer;
+}
+
+.section-toggle::-webkit-details-marker,
+.details-toggle::-webkit-details-marker {
+  display: none;
+}
+
 .section-header.compact h2 {
   font-size: 1.35rem;
+}
+
+.toggle-copy {
+  align-self: center;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sidebar .toggle-copy {
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .ghost-chip,
@@ -339,6 +366,53 @@ h4 {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+.guide-card {
+  display: grid;
+  gap: 1rem;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--module-accent, var(--accent)) 8%, white), rgba(255, 255, 255, 0.72)),
+    var(--surface);
+}
+
+.guide-summary,
+.guide-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.guide-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.guide-summary-card code {
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.guide-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.guide-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(28, 38, 48, 0.08);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.guide-step h4 {
+  margin-bottom: 0.35rem;
+  font-size: 1.02rem;
+}
+
+.guide-step p {
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .card,
@@ -983,6 +1057,23 @@ h4 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.portfolio-details {
+  display: grid;
+  gap: 1rem;
+}
+
+.details-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-strong);
+  background: rgba(255, 255, 255, 0.52);
+  font-weight: 600;
+}
+
 .summary-card,
 .phase-progress-card,
 .module-progress-card {
@@ -1307,6 +1398,8 @@ h4 {
   .workspace-grid,
   .contract-grid,
   .dependency-grid,
+  .guide-summary,
+  .guide-grid,
   .portfolio-summary,
   .phase-progress-grid,
   .phase-board {
@@ -1328,9 +1421,14 @@ h4 {
     grid-template-columns: 1fr;
   }
 
+  .workspace {
+    order: 1;
+  }
+
   .sidebar {
     position: static;
     min-height: auto;
+    order: 2;
   }
 
   .controls,
@@ -1369,8 +1467,34 @@ h4 {
 
   .meta-grid,
   .sidebar-stats,
+  .guide-summary,
+  .guide-grid,
   .module-board-grid {
     grid-template-columns: 1fr;
+  }
+
+  .topbar-actions,
+  .card-actions {
+    width: 100%;
+  }
+
+  .topbar-actions > button,
+  .card-actions > button,
+  .details-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .guide-step {
+    grid-template-columns: 1fr;
+  }
+
+  .portfolio-details:not([open]) {
+    gap: 0;
+  }
+
+  .journey-section:not([open]) {
+    gap: 0;
   }
 
   .wireframe-layout {

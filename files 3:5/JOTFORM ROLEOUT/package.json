@@ -1,0 +1,11 @@
+{
+  "name": "sally-health-forms",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "smoke": "node tests/smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.52.0"
+  }
+}

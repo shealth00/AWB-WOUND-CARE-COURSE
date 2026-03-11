@@ -13,6 +13,7 @@
 - Portfolio rollout phase planning across operations, foundation, and AI delivery waves
 - Portfolio progress dashboard with module and phase completion rollups
 - Progress snapshot export for handoff or status reporting
+- Quick-start guide with a reset-safe onboarding panel for first-time or returning operators
 - Route-level detail for module, feature, screen, route, purpose, components, primary actions, empty state, error state, permissions, APIs, DB objects, and acceptance criteria
 - Hash-based route selection so each inventory row is directly addressable in the browser
 - Responsive inventory, blueprint, state, contract, and acceptance views
@@ -26,6 +27,29 @@ python3 -m http.server 4173
 ```
 
 Then open `http://localhost:4173`.
+
+## Smoke test
+
+Install the browser test dependency once:
+
+```bash
+npm install
+npx playwright install chromium
+```
+
+Then run the repo smoke test:
+
+```bash
+npm run smoke
+```
+
+The smoke script verifies:
+
+- fresh load defaults to `Admin Workspace`
+- switching persona updates the current scope
+- checklist state survives a reload
+- progress export includes persona and scope metadata
+- `Reset Workspace` returns the shell to the default admin view without clearing checklist progress
 
 ## Data source
 
@@ -45,6 +69,26 @@ Required repository secrets:
 - `AWS_SECRET_ACCESS_KEY`
 
 The workflow targets EC2 instance `i-0ea90189e56dfae1b` in `us-east-1`, downloads the `main` branch archive from GitHub, syncs the site into `/var/www/forms.sallyhealth.org`, and reloads nginx.
+
+## DNS Cutover
+
+Use the DNS provider for `sallyhealth.org` to point `forms.sallyhealth.org` directly at the EC2 Elastic IP:
+
+1. Lower the TTL if your provider allows it.
+2. Replace any existing A records for `forms.sallyhealth.org` with `184.73.109.3`.
+3. Wait for propagation and verify:
+
+```bash
+dig +short forms.sallyhealth.org
+curl -I -H 'Host: forms.sallyhealth.org' http://184.73.109.3
+curl -I http://forms.sallyhealth.org
+```
+
+Expected result:
+
+- `dig` returns `184.73.109.3`
+- the direct host-header check returns `200`
+- the public hostname reaches the same EC2 instance
 
 ## Production Architecture
 
@@ -72,11 +116,14 @@ The workflow targets EC2 instance `i-0ea90189e56dfae1b` in `us-east-1`, download
 
 - Run `node --check app.js`
 - Run `node --check screen-data.js`
+- Run `npm run smoke`
 - Open the app locally and confirm:
   - admin persona is the default
   - switching between `Admin Workspace` and `All Screens` updates counts and progress
   - checklist state persists after reload
   - progress export downloads and includes persona metadata
+  - the onboarding guide explains scope, tracking, and export behavior
+  - `Reset Workspace` restores admin defaults without clearing progress
 - Push to `main`
 - Confirm the latest `Deploy Forms Site` workflow succeeds
 - Verify the instance directly:
@@ -113,6 +160,14 @@ Expected result:
 - `https://forms.sallyhealth.org` serves the current build
 - automated renewal is configured and dry-run passes
 
+Suggested nginx verification after Certbot:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+curl -I https://forms.sallyhealth.org
+```
+
 ## Handoff
 
 Another operator should be able to own this project with only this repository if they know:
@@ -126,3 +181,9 @@ Another operator should be able to own this project with only this repository if
 Current external blocker:
 
 - public DNS still needs to point `forms.sallyhealth.org` at `184.73.109.3` if it has not already been cut over
+
+## Known Limitations
+
+- The workspace is desktop-first; mobile is usable, but denser and more dependent on section toggles.
+- QA coverage is intentionally lightweight and centered on a browser smoke pass rather than a full test pyramid.
+- The runtime inventory is static and depends on `screen-data.js` staying aligned with the CSV source.

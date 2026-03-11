@@ -85,7 +85,7 @@ const CHECKLIST_DEFINITIONS = [
 const routeMap = new Map(screenInventory.map((screen) => [screen.route, screen]));
 const moduleOrder = [...new Set(screenInventory.map((screen) => screen.module))];
 const defaultRoute = screenInventory[0]?.route ?? "";
-const defaultAdminRoute = screenInventory.find((screen) => isAdminOnly(screen))?.route ?? defaultRoute;
+const defaultAdminRoute = screenInventory.find((screen) => hasAdminAccess(screen))?.route ?? defaultRoute;
 
 const elements = {
   workspaceKicker: document.querySelector("#workspace-kicker"),
@@ -99,6 +99,10 @@ const elements = {
   personaFilter: document.querySelector("#persona-filter"),
   featureFilter: document.querySelector("#feature-filter"),
   sortOrder: document.querySelector("#sort-order"),
+  workspaceGuide: document.querySelector("#workspace-guide"),
+  guideSummary: document.querySelector("#guide-summary"),
+  toggleGuide: document.querySelector("#toggle-guide"),
+  resetWorkspace: document.querySelector("#reset-workspace"),
   scopeSummary: document.querySelector("#scope-summary"),
   routeReadout: document.querySelector("#route-readout"),
   exportInventory: document.querySelector("#export-inventory"),
@@ -163,6 +167,16 @@ function bindEvents() {
 
   elements.personaFilter.addEventListener("change", (event) => {
     state.persona = event.target.value;
+    if (state.persona === ADMIN_PERSONA && !hasAdminAccess(routeMap.get(state.selectedRoute))) {
+      state.selectedRoute = defaultAdminRoute;
+      updateHash(state.selectedRoute, true);
+    }
+    persistState();
+    render();
+  });
+
+  elements.toggleGuide.addEventListener("click", () => {
+    state.guideDismissed = !state.guideDismissed;
     persistState();
     render();
   });
@@ -191,7 +205,8 @@ function bindEvents() {
     render();
   });
 
-  elements.clearFilters.addEventListener("click", resetFilters);
+  elements.clearFilters.addEventListener("click", resetWorkspace);
+  elements.resetWorkspace.addEventListener("click", resetWorkspace);
 
   elements.exportInventory.addEventListener("click", () => {
     downloadJson("platform-rollout-inventory.json", {
@@ -236,9 +251,9 @@ function bindEvents() {
   elements.routeCatalog.addEventListener("click", (event) => {
     const trigger = event.target.closest("[data-route]");
     if (!trigger) {
-      const resetTrigger = event.target.closest("[data-action='reset-filters']");
+      const resetTrigger = event.target.closest("[data-action='reset-workspace']");
       if (resetTrigger) {
-        resetFilters();
+        resetWorkspace();
       }
       return;
     }
@@ -317,7 +332,8 @@ function render() {
   normalizeState();
   const scopedScreens = getScopedScreens();
   const visibleScreens = getVisibleScreens(scopedScreens);
-  const selectedScreen = routeMap.get(state.selectedRoute) || visibleScreens[0] || scopedScreens[0] || routeMap.get(defaultRoute);
+  const selectedRouteScreen = routeMap.get(state.selectedRoute);
+  const selectedScreen = isScreenInPersonaScope(selectedRouteScreen) ? selectedRouteScreen : visibleScreens[0] || scopedScreens[0] || routeMap.get(defaultRoute);
 
   if (!selectedScreen) return;
 
@@ -327,16 +343,17 @@ function render() {
 
   syncControls(scopedScreens, visibleScreens);
   renderWorkspaceChrome(selectedScreen, scopedScreens, visibleScreens);
+  renderGuide(selectedScreen, scopedScreens, visibleScreens);
   renderSidebarStats(scopedScreens, visibleScreens);
   renderModuleFilter(scopedScreens);
-  renderJourney(selectedScreen);
+  renderJourney(selectedScreen, scopedScreens);
   renderHero(selectedScreen, scopedScreens, visibleScreens);
   renderCoverageGrid(selectedScreen, scopedScreens, visibleScreens);
   renderCatalog(visibleScreens, selectedScreen, scopedScreens);
   renderBlueprint(selectedScreen);
   renderStates(selectedScreen);
   renderContracts(selectedScreen);
-  renderDependencies(selectedScreen);
+  renderDependencies(selectedScreen, scopedScreens);
   renderExecution(selectedScreen);
   renderAcceptance(selectedScreen);
   renderModuleBoard(selectedScreen, scopedScreens);
@@ -355,9 +372,42 @@ function syncControls(scopedScreens, visibleScreens) {
   renderFeatureOptions(scopedScreens);
   elements.sortOrder.value = state.sort;
 
-  if (visibleScreens.length) {
-    elements.clearFilters.textContent = "Reset";
+  elements.clearFilters.textContent = "Reset Workspace";
+}
+
+function renderGuide(selectedScreen, scopedScreens, visibleScreens) {
+  const overallProgress = getGroupProgress(scopedScreens);
+  const guideVisible = !state.guideDismissed;
+
+  elements.toggleGuide.textContent = guideVisible ? "Hide Guide" : "Show Guide";
+  elements.workspaceGuide.hidden = !guideVisible;
+
+  if (!guideVisible) {
+    return;
   }
+
+  elements.guideSummary.innerHTML = `
+    <article class="summary-card guide-summary-card">
+      <span class="metric-label">Active Scope</span>
+      <strong>${escapeHtml(getPersonaLabel())}</strong>
+      <p>${escapeHtml(`${formatNumber(visibleScreens.length)} visible routes from ${formatNumber(scopedScreens.length)} scoped routes`)}</p>
+    </article>
+    <article class="summary-card guide-summary-card">
+      <span class="metric-label">Current Route</span>
+      <strong>${escapeHtml(selectedScreen.screen)}</strong>
+      <p><code>${escapeHtml(selectedScreen.route)}</code></p>
+    </article>
+    <article class="summary-card guide-summary-card">
+      <span class="metric-label">Progress</span>
+      <strong>${formatPercent(overallProgress.checklistPercent)}</strong>
+      <p>${escapeHtml(`${overallProgress.startedScreens} started routes, ${overallProgress.completedScreens} completed`)}</p>
+    </article>
+    <article class="summary-card guide-summary-card">
+      <span class="metric-label">Reset Behavior</span>
+      <strong>Safe Reset</strong>
+      <p>Reset Workspace restores admin defaults without clearing checklist progress.</p>
+    </article>
+  `;
 }
 
 function renderFeatureOptions(scopedScreens) {
@@ -431,12 +481,14 @@ function renderModuleFilter(scopedScreens) {
     .join("");
 }
 
-function renderJourney(selectedScreen) {
-  const featureFlow = screenInventory.filter(
+function renderJourney(selectedScreen, scopedScreens) {
+  const selectionInScope = scopedScreens.some((screen) => screen.route === selectedScreen.route);
+  const journeySource = selectionInScope && scopedScreens.length ? scopedScreens : screenInventory;
+  const featureFlow = journeySource.filter(
     (screen) => screen.module === selectedScreen.module && screen.feature === selectedScreen.feature
   );
-  const selectedIndex = screenInventory.findIndex((screen) => screen.route === selectedScreen.route);
-  const adjacent = [screenInventory[selectedIndex - 1], screenInventory[selectedIndex + 1]].filter(Boolean);
+  const selectedIndex = journeySource.findIndex((screen) => screen.route === selectedScreen.route);
+  const adjacent = [journeySource[selectedIndex - 1], journeySource[selectedIndex + 1]].filter(Boolean);
 
   elements.journeyRail.innerHTML = `
     <div class="journey-block">
@@ -445,13 +497,13 @@ function renderJourney(selectedScreen) {
         .map(
           (screen) => `
             <button
-              class="journey-button ${screen.route === selectedScreen.route ? "is-active" : ""} ${isAdminOnly(screen) ? "is-admin" : ""}"
+              class="journey-button ${screen.route === selectedScreen.route ? "is-active" : ""} ${hasAdminAccess(screen) ? "is-admin" : ""}"
               type="button"
               data-route="${escapeAttribute(screen.route)}"
               style="--module-accent: ${getModuleAccent(screen.module)};"
             >
               <strong>${escapeHtml(screen.screen)}</strong>
-              ${isAdminOnly(screen) ? `<span class="admin-badge">Admin Only</span>` : ""}
+              ${hasAdminAccess(screen) ? `<span class="admin-badge">Admin Access</span>` : ""}
               <span class="journey-copy">${escapeHtml(screen.route)}</span>
             </button>
           `
@@ -464,13 +516,13 @@ function renderJourney(selectedScreen) {
         .map(
           (screen) => `
             <button
-              class="journey-button ${isAdminOnly(screen) ? "is-admin" : ""}"
+              class="journey-button ${hasAdminAccess(screen) ? "is-admin" : ""}"
               type="button"
               data-route="${escapeAttribute(screen.route)}"
               style="--module-accent: ${getModuleAccent(screen.module)};"
             >
               <strong>${escapeHtml(screen.screen)}</strong>
-              ${isAdminOnly(screen) ? `<span class="admin-badge">Admin Only</span>` : ""}
+              ${hasAdminAccess(screen) ? `<span class="admin-badge">Admin Access</span>` : ""}
               <span class="journey-copy">${escapeHtml(screen.route)}</span>
             </button>
           `
@@ -514,8 +566,8 @@ function renderHero(selectedScreen, scopedScreens, visibleScreens) {
     { label: "Scope", value: `${visibleScreens.length}/${scopedScreens.length} visible` }
   ];
 
-  if (isAdminOnly(selectedScreen)) {
-    pills.splice(4, 0, { label: "Access", value: "Admin Only" });
+  if (hasAdminAccess(selectedScreen)) {
+    pills.splice(4, 0, { label: "Access", value: "Admin Access" });
   }
 
   elements.metaPills.innerHTML = pills
@@ -574,22 +626,18 @@ function renderCatalog(visibleScreens, selectedScreen, scopedScreens) {
 
   if (!visibleScreens.length) {
     elements.routeCatalog.innerHTML = `
-      <div class="empty-catalog">
-        <p>No rows match the current filter set.</p>
-        <button class="ghost-button small-button" type="button" data-action="reset-filters">Reset filters</button>
-      </div>
-    `;
+        <div class="empty-catalog">
+          <p>No rows match the current filter set.</p>
+          <button class="ghost-button small-button" type="button" data-action="reset-workspace">Reset Workspace</button>
+        </div>
+      `;
     return;
   }
 
   const hiddenNotice = selectionHidden
     ? `
         <div class="empty-catalog">
-          <p>${
-            selectionOutOfScope && state.persona === ADMIN_PERSONA
-              ? "The open route stays pinned in the detail canvas, but it sits outside the admin workspace scope."
-              : "The open route stays pinned in the detail canvas, but the current search/filter set hides it from the catalog."
-          }</p>
+          <p>The open route stays pinned in the detail canvas, but the current search/filter set hides it from the catalog.</p>
         </div>
       `
     : "";
@@ -600,7 +648,7 @@ function renderCatalog(visibleScreens, selectedScreen, scopedScreens) {
       .map(
         (screen) => `
           <button
-            class="catalog-card ${screen.route === selectedScreen.route ? "is-selected" : ""} ${isAdminOnly(screen) ? "is-admin" : ""}"
+            class="catalog-card ${screen.route === selectedScreen.route ? "is-selected" : ""} ${hasAdminAccess(screen) ? "is-admin" : ""}"
             type="button"
             data-route="${escapeAttribute(screen.route)}"
             style="--module-accent: ${getModuleAccent(screen.module)};"
@@ -608,7 +656,7 @@ function renderCatalog(visibleScreens, selectedScreen, scopedScreens) {
             <div class="catalog-card-top">
               <span class="sequence-chip">#${screen.index}</span>
               <span class="route-pill">${escapeHtml(screen.module)}</span>
-              ${isAdminOnly(screen) ? `<span class="admin-badge">Admin Only</span>` : ""}
+              ${hasAdminAccess(screen) ? `<span class="admin-badge">Admin Access</span>` : ""}
             </div>
             <div>
               <h4>${escapeHtml(screen.screen)}</h4>
@@ -778,25 +826,25 @@ function renderContracts(selectedScreen) {
     .join("");
 }
 
-function renderDependencies(selectedScreen) {
+function renderDependencies(selectedScreen, scopedScreens) {
   const panels = [
     {
       title: "Shared API Surface",
       label: "APIs",
       currentValues: selectedScreen.apis,
-      matches: getRelatedScreens(selectedScreen, "apis")
+      matches: getRelatedScreens(selectedScreen, "apis", scopedScreens)
     },
     {
       title: "Shared Data Objects",
       label: "DB Objects",
       currentValues: selectedScreen.dbObjects,
-      matches: getRelatedScreens(selectedScreen, "dbObjects")
+      matches: getRelatedScreens(selectedScreen, "dbObjects", scopedScreens)
     },
     {
       title: "Shared Access Rules",
       label: "Permissions",
       currentValues: selectedScreen.permissions,
-      matches: getRelatedScreens(selectedScreen, "permissions")
+      matches: getRelatedScreens(selectedScreen, "permissions", scopedScreens)
     }
   ];
 
@@ -922,10 +970,10 @@ function renderPhaseBoard(selectedScreen, scopedScreens) {
           ${samples
             .map(
               (screen) => `
-                <button class="phase-screen-button ${isAdminOnly(screen) ? "is-admin" : ""}" type="button" data-route="${escapeAttribute(screen.route)}">
+                <button class="phase-screen-button ${hasAdminAccess(screen) ? "is-admin" : ""}" type="button" data-route="${escapeAttribute(screen.route)}">
                   <span class="sequence-chip">#${screen.index}</span>
                   <span>${escapeHtml(screen.screen)}</span>
-                  ${isAdminOnly(screen) ? `<span class="admin-badge">Admin Only</span>` : ""}
+                  ${hasAdminAccess(screen) ? `<span class="admin-badge">Admin Access</span>` : ""}
                 </button>
               `
             )
@@ -966,13 +1014,13 @@ function renderModuleBoard(selectedScreen, scopedScreens) {
             ${previewRoutes
               .map(
                 (screen) => `
-                  <button class="mini-route ${isAdminOnly(screen) ? "is-admin" : ""}" type="button" data-route="${escapeAttribute(screen.route)}">
+                  <button class="mini-route ${hasAdminAccess(screen) ? "is-admin" : ""}" type="button" data-route="${escapeAttribute(screen.route)}">
                     <span class="sequence-chip">#${screen.index}</span>
                     <span class="mini-route-copy">
                       <strong>${escapeHtml(screen.screen)}</strong>
                       <code>${escapeHtml(screen.route)}</code>
                     </span>
-                    ${isAdminOnly(screen) ? `<span class="admin-badge">Admin Only</span>` : ""}
+                    ${hasAdminAccess(screen) ? `<span class="admin-badge">Admin Access</span>` : ""}
                   </button>
                 `
               )
@@ -1088,7 +1136,7 @@ function renderPortfolioProgress(selectedScreen, snapshot) {
 
 function getScopedScreens(persona = state.persona) {
   if (persona === ADMIN_PERSONA) {
-    return screenInventory.filter((screen) => isAdminOnly(screen));
+    return screenInventory.filter((screen) => hasAdminAccess(screen));
   }
 
   return [...screenInventory];
@@ -1110,8 +1158,8 @@ function getScopedModules(scopedScreens = getScopedScreens()) {
   return moduleOrder.filter((module) => scopedModuleSet.has(module));
 }
 
-function getRelatedScreens(selectedScreen, field) {
-  return screenInventory
+function getRelatedScreens(selectedScreen, field, sourceScreens = getScopedScreens()) {
+  return sourceScreens
     .filter((screen) => screen.route !== selectedScreen.route)
     .map((screen) => {
       const overlap = selectedScreen[field].filter((value) => screen[field].includes(value));
@@ -1188,6 +1236,10 @@ function focusModule(module) {
 function selectScreen(route) {
   const target = routeMap.get(route);
   if (!target) return;
+  if (state.persona === ADMIN_PERSONA && !hasAdminAccess(target)) {
+    showToast("Route is outside admin scope.");
+    return;
+  }
 
   state.selectedRoute = route;
   if (!matchesCurrentFilters(target)) {
@@ -1267,8 +1319,14 @@ function getScopeType() {
   return state.persona === ADMIN_PERSONA ? "admin-scoped" : "all-screens";
 }
 
-function isAdminOnly(screen) {
+function hasAdminAccess(screen) {
   return Array.isArray(screen?.permissions) && screen.permissions.some((permission) => ADMIN_PERMISSIONS.includes(permission));
+}
+
+function isScreenInPersonaScope(screen, persona = state.persona) {
+  if (!screen) return false;
+  if (persona === ADMIN_PERSONA) return hasAdminAccess(screen);
+  return true;
 }
 
 function buildChecklist(screen) {
@@ -1398,6 +1456,8 @@ function normalizeState() {
     state.checklistProgress = {};
   }
 
+  state.guideDismissed = Boolean(state.guideDismissed);
+
   const scopedModules = getScopedModules();
   if (!scopedModules.includes(state.module) && state.module !== ALL_MODULES) {
     state.module = ALL_MODULES;
@@ -1430,14 +1490,14 @@ function syncStateWithHash(isInitial = false) {
     return;
   }
 
-  if (isInitial && state.persona === ADMIN_PERSONA && !isAdminOnly(routeMap.get(state.selectedRoute) || {})) {
+  if (state.persona === ADMIN_PERSONA && !hasAdminAccess(selected)) {
     state.selectedRoute = defaultAdminRoute;
     persistState();
     updateHash(state.selectedRoute, true);
     return;
   }
 
-  if (state.selectedRoute) {
+  if (state.selectedRoute && routeMap.has(state.selectedRoute)) {
     updateHash(state.selectedRoute, true);
   }
 }
@@ -1454,13 +1514,17 @@ function updateHash(route, replace = false) {
   }
 }
 
-function resetFilters() {
+function resetWorkspace() {
+  state.persona = ADMIN_PERSONA;
   state.module = ALL_MODULES;
   state.feature = ALL_FEATURES;
   state.query = "";
   state.sort = "index";
+  state.selectedRoute = defaultAdminRoute;
   persistState();
+  updateHash(state.selectedRoute, true);
   render();
+  showToast("Workspace reset to the default admin scope. Checklist progress preserved.");
 }
 
 function getModuleAccent(module) {
@@ -1519,7 +1583,8 @@ function loadState() {
       query: saved?.query ?? "",
       sort: saved?.sort ?? "index",
       selectedRoute: saved?.selectedRoute ?? defaultAdminRoute,
-      checklistProgress: saved?.checklistProgress ?? {}
+      checklistProgress: saved?.checklistProgress ?? {},
+      guideDismissed: saved?.guideDismissed ?? false
     };
   } catch (error) {
     return {
@@ -1529,7 +1594,8 @@ function loadState() {
       query: "",
       sort: "index",
       selectedRoute: defaultAdminRoute,
-      checklistProgress: {}
+      checklistProgress: {},
+      guideDismissed: false
     };
   }
 }

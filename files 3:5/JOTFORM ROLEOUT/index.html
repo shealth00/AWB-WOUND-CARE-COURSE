@@ -35,15 +35,16 @@
         <div id="module-filter" class="module-filter"></div>
       </section>
 
-      <section class="sidebar-section">
-        <div class="section-header compact">
+      <details class="sidebar-section journey-section" open>
+        <summary class="section-header compact section-toggle">
           <div>
             <p class="eyebrow">Feature Flow</p>
             <h2>Selected Trail</h2>
           </div>
-        </div>
+          <span class="toggle-copy">Toggle</span>
+        </summary>
         <div id="journey-rail" class="journey-rail"></div>
-      </section>
+      </details>
 
       <section class="sidebar-section source-note">
         <p class="eyebrow">Source</p>
@@ -60,11 +61,48 @@
           <h2 id="view-title">Route Blueprint</h2>
         </div>
         <div class="topbar-actions">
+          <button id="toggle-guide" class="ghost-button" type="button">Hide Guide</button>
           <button id="export-inventory" class="ghost-button" type="button">Export Inventory</button>
           <button id="random-screen" class="ghost-button" type="button">Random Screen</button>
           <button id="next-screen" class="primary-button" type="button">Next Route</button>
         </div>
       </header>
+
+      <section id="workspace-guide" class="card guide-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">Start Here</p>
+            <h3>How to use this workspace</h3>
+          </div>
+          <div class="card-actions">
+            <button id="reset-workspace" class="ghost-button small-button" type="button">Reset Workspace</button>
+          </div>
+        </div>
+        <div id="guide-summary" class="guide-summary"></div>
+        <div class="guide-grid">
+          <article class="guide-step">
+            <span class="sequence-chip">1</span>
+            <div>
+              <h4>Set your scope</h4>
+              <p>Use persona, module, feature, and search to narrow the rollout surface before reviewing specs.</p>
+            </div>
+          </article>
+          <article class="guide-step">
+            <span class="sequence-chip">2</span>
+            <div>
+              <h4>Track execution</h4>
+              <p>Close checklist items per route so the dashboard and phase board reflect actual rollout progress.</p>
+            </div>
+          </article>
+          <article class="guide-step">
+            <span class="sequence-chip">3</span>
+            <div>
+              <h4>Export the handoff</h4>
+              <p>Download progress or inventory JSON when you need a planning snapshot for implementation or status review.</p>
+            </div>
+          </article>
+        </div>
+      </section>
 
       <section class="controls card">
         <label class="control-field">
@@ -132,7 +170,7 @@
               <p class="eyebrow">Catalog</p>
               <h3 id="catalog-count">Route Catalog</h3>
             </div>
-            <button id="clear-filters" class="ghost-button small-button" type="button">Reset</button>
+            <button id="clear-filters" class="ghost-button small-button" type="button">Reset Workspace</button>
           </div>
           <div id="route-catalog" class="route-catalog"></div>
         </aside>
@@ -234,8 +272,14 @@
           </div>
         </div>
         <div id="portfolio-summary" class="portfolio-summary"></div>
-        <div id="phase-progress" class="phase-progress-grid"></div>
-        <div id="module-progress" class="module-progress-grid"></div>
+        <details class="portfolio-details" open>
+          <summary class="details-toggle">
+            <span>Phase and module rollups</span>
+            <span class="toggle-copy">Toggle</span>
+          </summary>
+          <div id="phase-progress" class="phase-progress-grid"></div>
+          <div id="module-progress" class="module-progress-grid"></div>
+        </details>
       </section>
 
       <section class="card rollout-plan">
