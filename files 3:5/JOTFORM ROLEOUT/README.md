@@ -110,7 +110,7 @@ Expected result:
   - `Security Admin`
   - `Billing Admin`
 - Portfolio summaries and progress exports are calculated from the active persona scope
-- The selected route stays pinned in the detail canvas even if it falls outside the visible admin scope
+- Switching to `Admin Workspace` redirects non-admin routes back into admin scope
 
 ## Release Checklist
 
@@ -120,6 +120,7 @@ Expected result:
 - Open the app locally and confirm:
   - admin persona is the default
   - switching between `Admin Workspace` and `All Screens` updates counts and progress
+  - switching from a non-admin route to `Admin Workspace` re-scopes to an admin route
   - checklist state persists after reload
   - progress export downloads and includes persona metadata
   - the onboarding guide explains scope, tracking, and export behavior

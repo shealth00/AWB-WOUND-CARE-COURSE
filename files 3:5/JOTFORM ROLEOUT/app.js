@@ -621,7 +621,6 @@ function renderCoverageGrid(selectedScreen, scopedScreens, visibleScreens) {
 
 function renderCatalog(visibleScreens, selectedScreen, scopedScreens) {
   const selectionHidden = visibleScreens.every((screen) => screen.route !== selectedScreen.route);
-  const selectionOutOfScope = scopedScreens.every((screen) => screen.route !== selectedScreen.route);
   elements.catalogCount.textContent = `${visibleScreens.length} routes in view`;
 
   if (!visibleScreens.length) {
@@ -1472,13 +1471,24 @@ function normalizeState() {
   if (!validSorts.includes(state.sort)) {
     state.sort = "index";
   }
+
+  if (state.persona === ADMIN_PERSONA && !hasAdminAccess(routeMap.get(state.selectedRoute) || {})) {
+    state.selectedRoute = defaultAdminRoute;
+  }
 }
 
 function syncStateWithHash(isInitial = false) {
   const route = decodeURIComponent(window.location.hash.replace(/^#/, ""));
   if (routeMap.has(route)) {
-    state.selectedRoute = route;
     const selected = routeMap.get(route);
+    if (state.persona === ADMIN_PERSONA && !hasAdminAccess(selected)) {
+      state.selectedRoute = defaultAdminRoute;
+      persistState();
+      updateHash(state.selectedRoute, true);
+      return;
+    }
+
+    state.selectedRoute = route;
     if (selected && !matchesCurrentFilters(selected)) {
       state.module = selected.module;
       state.feature = ALL_FEATURES;
@@ -1490,7 +1500,7 @@ function syncStateWithHash(isInitial = false) {
     return;
   }
 
-  if (state.persona === ADMIN_PERSONA && !hasAdminAccess(selected)) {
+  if (isInitial && state.persona === ADMIN_PERSONA && !hasAdminAccess(routeMap.get(state.selectedRoute) || {})) {
     state.selectedRoute = defaultAdminRoute;
     persistState();
     updateHash(state.selectedRoute, true);

@@ -59,6 +59,18 @@ try {
     /62 scoped routes/i
   );
 
+  await page.goto(`http://127.0.0.1:${port}/#/signin`, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => {
+    const persona = document.querySelector("#persona-filter");
+    const readout = document.querySelector("#route-readout strong");
+    const summary = document.querySelector("#scope-summary");
+    return (
+      persona?.value === "admin" &&
+      readout?.textContent !== "/signin" &&
+      summary?.textContent?.includes("62 scoped routes")
+    );
+  });
+
   await page.selectOption("#persona-filter", "all");
   await page.waitForFunction(() => {
     const persona = document.querySelector("#persona-filter");
@@ -69,6 +81,25 @@ try {
     );
   });
 
+  await page.goto(`http://127.0.0.1:${port}/#/signin`, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => {
+    const readout = document.querySelector("#route-readout strong");
+    const persona = document.querySelector("#persona-filter");
+    return readout?.textContent === "/signin" && persona?.value === "all";
+  });
+
+  await page.selectOption("#persona-filter", "admin");
+  await page.waitForFunction(() => {
+    const readout = document.querySelector("#route-readout strong");
+    const summary = document.querySelector("#scope-summary");
+    const persona = document.querySelector("#persona-filter");
+    return (
+      persona?.value === "admin" &&
+      readout?.textContent !== "/signin" &&
+      summary?.textContent?.includes("62 scoped routes")
+    );
+  });
+
   await page.locator("[data-check-key='ui']").click();
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("[data-check-key='ui']");
@@ -76,6 +107,13 @@ try {
     await page.locator("[data-check-key='ui']").evaluate((element) => element.classList.contains("is-done")),
     true
   );
+
+  await page.selectOption("#persona-filter", "all");
+  await page.waitForFunction(() => {
+    const persona = document.querySelector("#persona-filter");
+    const summary = document.querySelector("#scope-summary");
+    return persona?.value === "all" && summary?.textContent?.includes("69 scoped routes");
+  });
 
   await page.fill("#screen-search", "chatbot");
   await page.waitForFunction(() => {
